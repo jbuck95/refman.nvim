@@ -1,6 +1,12 @@
 # fetch-metadata
 
-This project provides a command-line tool to fetch book metadata using an ISBN.
+! DISCLAIMER
+These Functions are from Kovid Goyal's Calibre: 
+> https://github.com/kovidgoyal/calibre
+
+
+This project provides a command-line tool to fetch book metadata using an ISBN, 
+and will be used by the refman.nvim plugin.
 
 ## Global Installation
 
