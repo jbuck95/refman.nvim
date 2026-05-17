@@ -13,10 +13,19 @@ function M.check()
 		vim.health.ok("fetch-metadata")
 	else
 		vim.health.warn("fetch-metadata not found (required for ISBN citations)")
+		vim.health.info("Install: pipx install <plugin-dir>/scripts/fetch-metadata")
+	end
+
+	if vim.fn.executable("pipx") == 1 then
+		vim.health.ok("pipx (for fetch-metadata install)")
+	elseif vim.fn.executable("pip") == 1 then
+		vim.health.ok("pip (for fetch-metadata install)")
+	else
+		vim.health.warn("neither pipx nor pip found – install fetch-metadata manually")
 	end
 
 	if vim.fn.executable("fzf") == 1 then
-		vim.health.ok("fzf (global)")
+		vim.health.ok("fzf")
 	else
 		vim.health.error("fzf not found (required for citation selection)")
 	end

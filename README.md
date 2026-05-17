@@ -2,6 +2,22 @@
 
 Fetch Citations from DOI/ISBN and manage references.
 
+## Dependencies
+
+### External tools
+- `curl` — for DOI fetching (usually pre-installed)
+- `fzf` — for citation selection UI
+- `fzf.vim` — Neovim fzf integration
+- `fetch-metadata` — for ISBN citation fetching
+
+### Install fetch-metadata
+
+```bash
+cd ~/.local/share/nvim/lazy/refman.nvim/scripts/fetch-metadata
+pipx install .       # recommended (isolated venv)
+# or: pip install --user .
+```
+
 ## Install (lazy)
 
 ```lua
