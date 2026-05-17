@@ -2,20 +2,24 @@
 
 Fetch Citations from DOI/ISBN and manage references.
 
+## Verify
+
+`:checkhealth refman`
+
 ## Dependencies
 
-### External tools
-- `curl` — for DOI fetching (usually pre-installed)
+### System
+- `curl` — for DOI fetching
 - `fzf` — for citation selection UI
-- `fzf.vim` — Neovim fzf integration
-- `fetch-metadata` — for ISBN citation fetching
+- `bash`
 
-### Install fetch-metadata
+### Neovim
+- [fzf.vim](https://github.com/junegunn/fzf.vim)
+
+### fetch-metadata (ISBN)
 
 ```bash
-cd ~/.local/share/nvim/lazy/refman.nvim/scripts/fetch-metadata
-pipx install .       # recommended (isolated venv)
-# or: pip install --user .
+pipx install <plugin-dir>/scripts/fetch-metadata
 ```
 
 ## Install (lazy)
@@ -47,3 +51,18 @@ return {
     end,
 }
 ```
+
+
+## Disclaimer
+
+Some fetch-functions are from:
+
+> https://github.com/kovidgoyal/calibre
+
+### License 
+
+Copyright (C) 2026 Jan H
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
