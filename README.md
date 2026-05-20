@@ -9,8 +9,8 @@ Fetch Citations from DOI/ISBN and manage references.
 ## Dependencies
 
 ### System
-- `curl` — for DOI fetching
-- `fzf` — for citation selection UI
+- `curl` -- for DOI fetching
+- `fzf` -- for citation selection UI
 - `bash`
 
 ### Neovim
@@ -22,10 +22,12 @@ Fetch Citations from DOI/ISBN and manage references.
 pipx install <plugin-dir>/scripts/fetch-metadata
 ```
 
-## Install (lazy)
+## Install
+
+### lazy.nvim (minimal)
 
 ```lua
-return {
+{
     "jbuck95/refman.nvim",
     dependencies = {
         {
@@ -35,23 +37,74 @@ return {
     },
     cmd = { "DOI", "ISBN", "RefImport", "RefOpen", "RefExport", "RefMulti" },
     keys = {
-        { "<leader>rs", desc = "Save line as citation" },
-        { "<leader>ro", desc = "Open Bibliography Database" },
-        { "<leader>ri", desc = "Insert Citation" },
-        { "<leader>rm", desc = "Insert Multiple Citations" },
+        { "<leader>rs", "<Plug>(RefmanImport)", desc = "Save line as citation" },
+        { "<leader>ro", "<Plug>(RefmanOpen)", desc = "Open Bibliography Database" },
+        { "<leader>ri", "<Plug>(RefmanExport)", desc = "Insert Citation" },
+        { "<leader>rm", "<Plug>(RefmanMulti)", desc = "Insert Multiple Citations" },
+    },
+}
+```
+
+### lazy.nvim (with custom config)
+
+```lua
+{
+    "jbuck95/refman.nvim",
+    dependencies = {
+        {
+            "junegunn/fzf.vim",
+            dependencies = { "junegunn/fzf" },
+        },
+    },
+    cmd = { "DOI", "ISBN", "RefImport", "RefOpen", "RefExport", "RefMulti" },
+    keys = {
+        { "<leader>rs", "<Plug>(RefmanImport)", desc = "Save line as citation" },
+        { "<leader>ro", "<Plug>(RefmanOpen)", desc = "Open Bibliography Database" },
+        { "<leader>ri", "<Plug>(RefmanExport)", desc = "Insert Citation" },
+        { "<leader>rm", "<Plug>(RefmanMulti)", desc = "Insert Multiple Citations" },
     },
     config = function()
-        local refman = require("refman")
-        refman.setup()
-
-        vim.keymap.set("n", "<leader>rs", refman.import_current_line, { desc = "Save line as citation" })
-        vim.keymap.set("n", "<leader>ro", refman.open_database, { desc = "Open Bibliography Database" })
-        vim.keymap.set("n", "<leader>ri", refman.export_citation, { desc = "Insert Citation" })
-        vim.keymap.set("n", "<leader>rm", refman.export_citations_multi, { desc = "Insert Multiple Citations" })
+        require("refman").setup({
+            log_level = "error",
+            db_file = "~/my-bibliography.md",
+        })
     end,
 }
 ```
 
+## Usage
+
+| Command | Action |
+|---------|--------|
+| `:DOI` (visual selection) | Convert DOI to citation |
+| `:ISBN` (visual selection) | Convert ISBN to citation |
+| `:RefImport` | Save current line as bibliography entry |
+| `:RefOpen` | Open bibliography database |
+| `:RefExport` | Insert single citation via fzf |
+| `:RefMulti` | Insert multiple citations via fzf |
+| `:RefLog` | Open debug log |
+
+### Keymaps via `<Plug>` mappings
+
+```lua
+vim.keymap.set("n", "<leader>rs", "<Plug>(RefmanImport)", { desc = "Save line as citation" })
+vim.keymap.set("n", "<leader>ro", "<Plug>(RefmanOpen)", { desc = "Open Bibliography Database" })
+vim.keymap.set("n", "<leader>ri", "<Plug>(RefmanExport)", { desc = "Insert Citation" })
+vim.keymap.set("n", "<leader>rm", "<Plug>(RefmanMulti)", { desc = "Insert Multiple Citations" })
+```
+
+### Lua API
+
+```lua
+local refman = require("refman")
+refman.import_current_line()
+refman.open_database()
+refman.export_citation()
+refman.export_citations_multi()
+refman.convert_doi_citation()
+refman.convert_isbn_citation()
+refman.setup({ db_file = "~/my-bib.md" })  -- optional
+```
 
 ## Disclaimer
 
@@ -59,7 +112,7 @@ Some fetch-functions are from:
 
 > https://github.com/kovidgoyal/calibre
 
-### License 
+### License
 
 Copyright (C) 2026 Jan H
 This program is free software: you can redistribute it and/or modify
