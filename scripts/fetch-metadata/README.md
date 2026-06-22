@@ -1,12 +1,17 @@
 # fetch-metadata
 
-! DISCLAIMER
-These Functions are from Kovid Goyal's Calibre: 
+**DEMO**
+
+![Demo](<insert-video-link>)
+
+## Description
+
+Command-line tool to fetch book metadata using an ISBN, used by the refman.nvim plugin.
+
+## Disclaimer
+
+These functions are from Kovid Goyal's Calibre:
 > https://github.com/kovidgoyal/calibre
-
-
-This project provides a command-line tool to fetch book metadata using an ISBN, 
-and will be used by the refman.nvim plugin.
 
 ## Global Installation
 
@@ -31,7 +36,7 @@ take effect.
 
 1.  Navigate to the project's root directory:
     ```bash
-    cd /home/jan/own/fmd.nvim/fetchfunctions/fetch-metadata
+    cd <plugin-dir>/scripts/fetch-metadata
     ```
 
 2.  Install the `fetch-metadata` tool using `pipx`:

@@ -4,13 +4,57 @@ local M = {}
 local log = require("refman.log")
 local db = require("refman.db")
 
+-- ── citation cache ────────────────────────────────────────────────────────────
+
+local plugin_root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
+local fetch_metadata_cmd = "PYTHONPATH="
+  .. plugin_root
+  .. "/scripts/fetch-metadata/src python3 -m metadata.cli"
+
+local cache_file = vim.fn.stdpath("cache") .. "/refman-cache.json"
+
+local function load_cache()
+  local f = io.open(cache_file, "r")
+  if not f then
+    return {}
+  end
+  local content = f:read("*all")
+  f:close()
+  if not content or content == "" then
+    return {}
+  end
+  local ok, data = pcall(vim.json.decode, content)
+  return (ok and data) and data or {}
+end
+
+local function save_cache(cache)
+  local f = io.open(cache_file, "w")
+  if f then
+    f:write(vim.json.encode(cache))
+    f:close()
+  end
+end
+
+local function cache_key(identifier, style_name)
+  return identifier .. "::" .. style_name
+end
+
 -- ── DOI citation fetching ────────────────────────────────────────────────────
 
 ---@param doi string
 ---@param style_config RefmanStyle
 ---@return string|nil
 function M.fetch_doi_citation(doi, style_config)
-  doi = doi:gsub("^https?://doi%.org/", ""):gsub("^doi:", ""):gsub("^DOI:", "")
+  doi = doi:gsub("^https?://doi%.org/", "")
+    :gsub("^doi:", "")
+    :gsub("^DOI:", "")
+    :gsub("[.,;:)%]%[\"?!']+$", "")
+  local ckey = cache_key(doi, style_config.name)
+  local cache = load_cache()
+  if cache[ckey] then
+    log.debug("DOI cache hit: " .. ckey)
+    return cache[ckey]
+  end
   local apis = {}
   for _, api in ipairs(style_config.apis or {}) do
     local url = api.url:gsub("{doi}", doi):gsub("{style}", api.style):gsub("{lang}", api.lang or "en-US")
@@ -29,16 +73,22 @@ function M.fetch_doi_citation(doi, style_config)
       and not result:match("^%s*$")
       and result:len() > 20
     then
-      result = result
-        :gsub("&", "&")
-        :gsub("<", "<")
-        :gsub(">", ">")
-        :gsub("&quot;", "\"")
-        :gsub("'", "'")
-        :gsub("^%s+", "")
-        :gsub("%s+$", "")
-      log.debug("DOI fetch succeeded (API " .. i .. "/" .. #apis .. ")")
-      return result
+      if not result:match("%d%d%d%d") then
+        log.debug("DOI API " .. i .. " rejected: no year found in result")
+      else
+        result = result
+          :gsub("&", "&")
+          :gsub("<", "<")
+          :gsub(">", ">")
+          :gsub("&quot;", "\"")
+          :gsub("'", "'")
+          :gsub("^%s+", "")
+          :gsub("%s+$", "")
+        log.debug("DOI fetch succeeded (API " .. i .. "/" .. #apis .. ")")
+        cache[ckey] = result
+        save_cache(cache)
+        return result
+      end
     end
     if result then
       local reason = ""
@@ -99,7 +149,7 @@ function M.fetch_doi_citation(doi, style_config)
         :gsub("{journal}", journal or "")
         :gsub("{volume}", volume or "")
         :gsub("{year}", year)
-      log.debug("DOI " .. doi .. ": Crossref fallback succeeded")
+      log.debug("DOI " .. doi .. ": Crossref fallback succeeded (not cached)")
       return citation
     else
       log.debug("DOI " .. doi .. ": Crossref JSON parse failed")
@@ -124,7 +174,13 @@ end
 ---@return string|nil
 function M.fetch_isbn_citation(isbn, style_config)
   isbn = isbn:gsub("[^0-9X]", "")
-  local cmd = "fetch-metadata --isbn " .. isbn .. (log.level == "verbose" and " -v" or "")
+  local ckey = cache_key(isbn, style_config.name)
+  local cache = load_cache()
+  if cache[ckey] then
+    log.debug("ISBN cache hit: " .. ckey)
+    return cache[ckey]
+  end
+  local cmd = fetch_metadata_cmd .. " --isbn " .. isbn .. (log.level == "verbose" and " -v" or "")
   log.debug("ISBN lookup for " .. isbn .. " (style: " .. (style_config.name or "unknown") .. ")")
   local result = db.exec_cmd(cmd)
   if not result or result == "" then
@@ -142,10 +198,29 @@ function M.fetch_isbn_citation(isbn, style_config)
         local item = data[key]
         if item then
           local title = item.title or "Unknown Title"
+          if item.subtitle then
+            title = title .. ": " .. item.subtitle
+          end
           local authors_list = {}
           if item.authors then
             for _, a in ipairs(item.authors) do
               table.insert(authors_list, a.name or "Unknown Author")
+            end
+          end
+          if #authors_list <= 1 and item.by_statement then
+            local bs = item.by_statement:gsub("%.$", "")
+            for _, sep in ipairs({"/", "; ", ";", ", "}) do
+              local parts = {}
+              for part in bs:gmatch("[^" .. sep .. "]+") do
+                part = part:match("^%s*(.-)%s*$")
+                if part ~= "" then
+                  table.insert(parts, part)
+                end
+              end
+              if #parts > #authors_list then
+                authors_list = parts
+                break
+              end
             end
           end
           local authors = #authors_list > 0 and table.concat(authors_list, "; ") or "Unknown Author"
@@ -159,7 +234,7 @@ function M.fetch_isbn_citation(isbn, style_config)
             :gsub("{title}", title)
             :gsub("{publisher}", publisher)
             :gsub("{year}", year)
-          log.debug("ISBN " .. isbn .. ": OpenLibrary fallback succeeded")
+          log.debug("ISBN " .. isbn .. ": OpenLibrary fallback succeeded (not cached)")
           return citation
         else
           log.debug("ISBN " .. isbn .. ": OpenLibrary returned no item for key " .. key)
@@ -201,7 +276,15 @@ function M.fetch_isbn_citation(isbn, style_config)
     :gsub("{title}", title)
     :gsub("{publisher}", publisher)
     :gsub("{year}", year)
+  cache[ckey] = citation
+  save_cache(cache)
   return citation
+end
+
+---Clear the citation cache file.
+function M.clear_cache()
+  os.remove(cache_file)
+  log.info("Citation cache cleared")
 end
 
 return M

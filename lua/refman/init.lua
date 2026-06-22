@@ -242,6 +242,13 @@ function M.open_log()
   log.open_log()
 end
 
+---Clear the citation fetch cache.
+function M.clear_cache()
+  init_submodules()
+  _citation.clear_cache()
+  vim.notify("Citation cache cleared", vim.log.levels.INFO)
+end
+
 -- ── user commands ────────────────────────────────────────────────────────────
 
 vim.api.nvim_create_user_command("DOI", function()
@@ -270,6 +277,10 @@ end, {})
 
 vim.api.nvim_create_user_command("RefLog", function()
   M.open_log()
+end, {})
+
+vim.api.nvim_create_user_command("RefCacheClear", function()
+  M.clear_cache()
 end, {})
 
 -- ── <Plug> mappings ──────────────────────────────────────────────────────────

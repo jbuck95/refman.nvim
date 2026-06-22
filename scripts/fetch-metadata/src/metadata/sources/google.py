@@ -1,6 +1,5 @@
 import requests
 from .base import Source, Metadata
-from isbnlib import canonical
 
 class GoogleBooks(Source):
     BASE_URL = "https://www.googleapis.com/books/v1/volumes"
@@ -13,7 +12,7 @@ class GoogleBooks(Source):
         if authors:
             query.append("from:" + "+".join(authors))
         if identifiers and "isbn" in identifiers:
-            query.append(f"isbn:{canonical(identifiers['isbn'])}")
+            query.append(f"isbn:{identifiers['isbn']}")
 
         if not query:
             return results

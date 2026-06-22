@@ -167,6 +167,10 @@ end
 function M.add_entry(entry)
   local existing = M.read_markdown_db()
   for _, e in ipairs(existing) do
+    if entry.isbn_doi and e.isbn_doi and entry.isbn_doi == e.isbn_doi then
+      vim.notify("Entry already exists (ISBN/DOI: " .. entry.isbn_doi .. ")", vim.log.levels.WARN)
+      return false
+    end
     if (e.author or ""):lower():match("^%s*(.-)%s*$") == (entry.author or ""):lower():match("^%s*(.-)%s*$")
       and (e.title or ""):lower():match("^%s*(.-)%s*$") == (entry.title or ""):lower():match("^%s*(.-)%s*$") then
       vim.notify("Entry already exists: " .. entry.title, vim.log.levels.WARN)

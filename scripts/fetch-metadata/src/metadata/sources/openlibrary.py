@@ -1,6 +1,5 @@
 import requests
 from .base import Source, Metadata
-from isbnlib import canonical
 
 class OpenLibrary(Source):
     BASE_URL = "https://openlibrary.org/api/books"
@@ -9,7 +8,7 @@ class OpenLibrary(Source):
         results = []
         query = {}
         if identifiers and "isbn" in identifiers:
-            query["bibkeys"] = f"ISBN:{canonical(identifiers['isbn'])}"
+            query["bibkeys"] = f"ISBN:{identifiers['isbn']}"
         else:
             return results
 
@@ -24,12 +23,23 @@ class OpenLibrary(Source):
                 publisher = item.get("publishers", [{}])[0].get("name") if item.get("publishers") else None
                 log.debug(f"Open Library publisher: {publisher}")
                 authors = [a["name"] for a in item.get("authors", [])] if item.get("authors") else []
+                if len(authors) <= 1 and item.get("by_statement"):
+                    bs = item["by_statement"].rstrip(".")
+                    for sep in ["/", "; ", ";", ", "]:
+                        parts = [p.strip() for p in bs.split(sep) if p.strip()]
+                        if len(parts) > len(authors):
+                            authors = parts
+                            break
                 identifiers = {"isbn": key.replace("ISBN:", "")}
                 # Handle notes as string or dict
                 notes = item.get("notes")
                 comments = notes.get("value") if isinstance(notes, dict) else notes
+                # Combine title and subtitle
+                full_title = item.get("title") or ""
+                if item.get("subtitle"):
+                    full_title = f"{full_title}: {item.get('subtitle')}"
                 results.append(Metadata(
-                    title=item.get("title"),
+                    title=full_title,
                     authors=authors,
                     identifiers=identifiers,
                     publisher=publisher,

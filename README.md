@@ -1,12 +1,14 @@
 # refman.nvim
 
+**DEMO**
+
+![Demo](<insert-video-link>)
+
+## Description
+
 Fetch Citations from DOI/ISBN and manage references.
 
-## Verify
-
-`:checkhealth refman`
-
-## Dependencies
+## Requirements
 
 ### System
 - `curl` -- for DOI fetching
@@ -21,6 +23,8 @@ Fetch Citations from DOI/ISBN and manage references.
 ```bash
 pipx install <plugin-dir>/scripts/fetch-metadata
 ```
+
+Verify: `:checkhealth refman`  |  Help: `:h refman`
 
 ## Install
 
@@ -103,16 +107,36 @@ refman.export_citation()
 refman.export_citations_multi()
 refman.convert_doi_citation()
 refman.convert_isbn_citation()
-refman.setup({ db_file = "~/my-bib.md" })  -- optional
+refman.open_log()                              -- open debug log
+refman.setup({ db_file = "~/my-bib.md" })      -- optional
 ```
+
+## Minimal Config for Issues
+
+```lua
+vim.cmd([[set rtp+=~/.local/share/nvim/lazy/refman.nvim]])
+vim.keymap.set("n", "<leader>ri", "<Plug>(RefmanExport)")
+```
+
+## Configuration
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `db_file` | `~/refman-bibliography.md` | Bibliography database path |
+| `log_level` | `"error"` | Log level (`"debug"`, `"info"`, `"warn"`, `"error"`) |
+| `doi_styles` | see defaults | DOI citation style configurations |
+| `isbn_styles` | see defaults | ISBN citation style configurations |
+
+## Credits
+
+Fetch functions adapted from [calibre](https://github.com/kovidgoyal/calibre) by Kovid Goyal.
 
 ## Disclaimer
 
-Some fetch-functions are from:
+Built for my personal master's thesis workflow.
+AI was used extensively in development.
 
-> https://github.com/kovidgoyal/calibre
-
-### License
+## License
 
 Copyright (C) 2026 Jan H
 This program is free software: you can redistribute it and/or modify

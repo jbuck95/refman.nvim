@@ -86,15 +86,13 @@ function M.citation_tui(id_type, identifier)
     end
   end
 
-  local function already_in_db(cit)
-    local author = cit:match("^(.-)%s*:") or "Unknown"
-    local title = cit:match(":%s*(.-)%s*[%.;]") or cit:match(":%s*(.+)$") or "Unknown"
+  local function already_in_db()
+    if not identifier or identifier == "" then
+      return false
+    end
     local entries = db.read_markdown_db()
     for _, e in ipairs(entries) do
-      if
-        (e.author or ""):lower():match("^%s*(.-)%s*$") == author:lower():match("^%s*(.-)%s*$")
-        and (e.title or ""):lower():match("^%s*(.-)%s*$") == title:lower():match("^%s*(.-)%s*$")
-      then
+      if e.isbn_doi and e.isbn_doi == identifier then
         return true
       end
     end
@@ -135,7 +133,7 @@ function M.citation_tui(id_type, identifier)
       end
       table.insert(lines, "")
 
-      local exists = already_in_db(citation_text)
+      local exists = already_in_db()
 
       clear_buf_keymaps(buf)
       if exists then
