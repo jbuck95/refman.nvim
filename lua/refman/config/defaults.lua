@@ -122,8 +122,8 @@ return {
 
   source_apis = {
     crossref = { enabled = true },
-    openalex = { enabled = false },
-    arxiv    = { enabled = false },
+    openalex = { enabled = true },
+    arxiv    = { enabled = true },
     pubmed   = { enabled = false },
   },
 

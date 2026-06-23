@@ -188,6 +188,8 @@ function M._parse_work(work)
   return entry
 end
 
+M.fetch = M.fetch_by_doi
+
 ---Check if OpenAlex API is reachable.
 ---@return boolean
 function M.probe()

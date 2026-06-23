@@ -6,6 +6,31 @@ local M = {}
 local log = require("refman.log")
 local config
 
+-- Keep in sync with CREATE TABLE columns in M.init()
+M.VALID_COLUMNS = {
+  author     = true,
+  title      = true,
+  citation   = true,
+  isbn_doi   = true,
+  tags       = true,
+  notes      = true,
+  abstract   = true,
+  keywords   = true,
+  pub_type   = true,
+  journal    = true,
+  volume     = true,
+  issue      = true,
+  pages      = true,
+  year       = true,
+  publisher  = true,
+  doi        = true,
+  isbn       = true,
+  issn       = true,
+  url        = true,
+  pmid       = true,
+  source     = true,
+}
+
 function M.set_config(cfg)
   config = cfg or vim.tbl_extend("keep", {}, require("refman.config.defaults"))
 end
@@ -233,8 +258,31 @@ end
 
 ---@param id integer
 ---@param updates table Field → value map
----@return boolean
+---@return boolean ok
+---@return string? error_message
 function M.update_entry(id, updates)
+  local unknown = {}
+  for field, _ in pairs(updates) do
+    if not M.VALID_COLUMNS[field] then
+      unknown[#unknown + 1] = field
+    end
+  end
+  if #unknown > 0 then
+    local msg = "Unknown field(s): " .. table.concat(unknown, ", ")
+    log.warn("update_entry: " .. msg .. " for id " .. tostring(id))
+    return false, msg
+  end
+
+  if updates.doi and updates.doi ~= "" then
+    local check = sqlite("SELECT id FROM entries WHERE doi = " .. esc(updates.doi) .. ";")
+    local rows = parse_entries_json(check)
+    for _, row in ipairs(rows) do
+      if row.id ~= id then
+        return false, "DOI already used by entry #" .. tostring(row.id) .. ": " .. updates.doi
+      end
+    end
+  end
+
   local sets = {}
   for field, value in pairs(updates) do
     if field == "keywords" then
@@ -244,11 +292,27 @@ function M.update_entry(id, updates)
     end
   end
   if #sets == 0 then
-    return false
+    return false, "No fields to update"
   end
   table.insert(sets, "updated_at = datetime('now')")
-  sqlite("UPDATE entries SET " .. table.concat(sets, ", ") .. " WHERE id = " .. tostring(id) .. ";")
-  return vim.v.shell_error == 0
+  local update_sql = "UPDATE entries SET " .. table.concat(sets, ", ") .. " WHERE id = " .. tostring(id) .. ";"
+  local stderr_file = os.tmpname()
+  local cmd = string.format('sqlite3 -json -bail "%s" 2>%s %s', db_path(), stderr_file, vim.fn.shellescape(update_sql))
+  vim.fn.system(cmd)
+  if vim.v.shell_error ~= 0 then
+    local stderr_text = ""
+    local f = io.open(stderr_file)
+    if f then
+      stderr_text = f:read("*a"):gsub("^%s+", ""):gsub("%s+$", "")
+      f:close()
+    end
+    os.remove(stderr_file)
+    local msg = stderr_text ~= "" and stderr_text or ("sqlite3 error (exit " .. vim.v.shell_error .. ")")
+    log.warn("update_entry failed for id " .. tostring(id) .. ": " .. msg)
+    return false, msg
+  end
+  os.remove(stderr_file)
+  return true
 end
 
 ---@param id integer

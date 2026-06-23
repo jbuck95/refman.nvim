@@ -75,7 +75,9 @@ end
 function M.fetch_doi_entry(doi)
   local sources = {
     { name = "crossref", priority = 1 },
-    { name = "openalex", priority = 2 },
+    { name = "arxiv", priority = 2 },
+    { name = "openalex", priority = 3 },
+    { name = "pubmed", priority = 4 },
   }
 
   for _, src in ipairs(sources) do

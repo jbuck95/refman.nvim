@@ -22,12 +22,31 @@ local function separator(width)
   return string.rep("\226\148\128", width)
 end
 
-local function field(name, value)
+local function field(name, value, width)
   if not value or value == "" then
     return nil
   end
   local clean = value:gsub("\n", " ")
-  return string.format("  %-12s %s", name .. ":", clean)
+  local label = string.format("  %-12s ", name .. ":")
+  local indent = string.rep(" ", #label)
+  local available = width - #label
+  local wrapped = {}
+  while #clean > 0 do
+    if #clean <= available then
+      wrapped[#wrapped + 1] = clean
+      break
+    end
+    local chunk = clean:sub(1, available)
+    local pos = chunk:match(".*() ")
+    local cut = pos or available
+    wrapped[#wrapped + 1] = clean:sub(1, cut - 1)
+    clean = clean:sub(cut + 1)
+  end
+  local lines = {}
+  for i, w in ipairs(wrapped) do
+    lines[i] = (i == 1 and label or indent) .. w
+  end
+  return lines
 end
 
 ---Open a read-only buffer showing all entry fields.
@@ -48,45 +67,49 @@ function M.view_entry(entry, orig_buf)
   local width = math.min(80, vim.o.columns - 4)
   local lines = {}
 
-  vim.list_extend(lines, {
-    separator(width),
-    field("Author", entry.author) or "  Author:       (unknown)",
-    field("Title", entry.title) or "  Title:        (unknown)",
-  })
+  local function append(t)
+    if t then
+      vim.list_extend(lines, t)
+    end
+  end
+
+  table.insert(lines, separator(width))
+  append(field("Author", entry.author, width) or { "  Author:       (unknown)" })
+  append(field("Title", entry.title, width) or { "  Title:        (unknown)" })
 
   if entry.year then
-    table.insert(lines, field("Year", entry.year))
+    append(field("Year", entry.year, width))
   end
   if entry.pub_type then
-    table.insert(lines, field("Type", entry.pub_type))
+    append(field("Type", entry.pub_type, width))
   end
   if entry.journal then
     local j = entry.journal
     if entry.volume then j = j .. " " .. entry.volume end
     if entry.issue then j = j .. "(" .. entry.issue .. ")" end
     if entry.pages then j = j .. ", pp. " .. entry.pages end
-    table.insert(lines, field("Journal", j))
+    append(field("Journal", j, width))
   end
   if entry.publisher then
-    table.insert(lines, field("Publisher", entry.publisher))
+    append(field("Publisher", entry.publisher, width))
   end
   if entry.doi then
-    table.insert(lines, field("DOI", entry.doi))
+    append(field("DOI", entry.doi, width))
   end
   if entry.isbn then
-    table.insert(lines, field("ISBN", entry.isbn))
+    append(field("ISBN", entry.isbn, width))
   end
   if entry.pmid then
-    table.insert(lines, field("PMID", entry.pmid))
+    append(field("PMID", entry.pmid, width))
   end
   if entry.url then
-    table.insert(lines, field("URL", entry.url))
+    append(field("URL", entry.url, width))
   end
 
   if entry.keywords and type(entry.keywords) == "table" and #entry.keywords > 0 then
-    table.insert(lines, field("Keywords", table.concat(entry.keywords, ", ")))
+    append(field("Keywords", table.concat(entry.keywords, ", "), width))
   elseif entry.keywords and type(entry.keywords) == "string" and entry.keywords ~= "" then
-    table.insert(lines, field("Keywords", entry.keywords))
+    append(field("Keywords", entry.keywords, width))
   end
 
   local src = entry.source or "manual"
@@ -96,7 +119,7 @@ function M.view_entry(entry, orig_buf)
   if updated and updated ~= "" then
     meta = meta .. "  |  Updated: " .. updated
   end
-  table.insert(lines, field("Meta", meta))
+  append(field("Meta", meta, width))
 
   if entry.citation then
     table.insert(lines, "")
@@ -306,20 +329,30 @@ function M.edit_entry(entry, orig_buf)
     local field_lines = {}
 
     for _, line in ipairs(buf_lines) do
-      local name = line:match("^%[(%w+)%]$")
+      local name = line:match("^%[([%w_]+)%]$")
       if name then
         if current_field then
-          fields[current_field] = table.concat(field_lines, "\n")
+          while #field_lines > 0 and field_lines[#field_lines] == "" do
+            table.remove(field_lines)
+          end
+          if #field_lines > 0 then
+            fields[current_field] = table.concat(field_lines, "\n")
+          end
         end
         current_field = name
         field_lines = {}
-      elseif current_field then
+      elseif current_field and not line:match("^#") then
         table.insert(field_lines, line)
       end
     end
 
     if current_field then
-      fields[current_field] = table.concat(field_lines, "\n")
+      while #field_lines > 0 and field_lines[#field_lines] == "" do
+        table.remove(field_lines)
+      end
+      if #field_lines > 0 then
+        fields[current_field] = table.concat(field_lines, "\n")
+      end
     end
 
     if fields.keywords then
@@ -342,7 +375,7 @@ function M.edit_entry(entry, orig_buf)
         vim.notify("[refman] Cannot save: entry has no id", vim.log.levels.ERROR)
         return
       end
-      local ok = backend().update_entry(entry.id, fields)
+      local ok, err = backend().update_entry(entry.id, fields)
       if ok then
         vim.bo[buf].modified = false
         local updated = vim.tbl_extend("force", vim.deepcopy(entry), fields)
@@ -350,7 +383,7 @@ function M.edit_entry(entry, orig_buf)
         close()
         M.view_entry(updated, orig_buf)
       else
-        vim.notify("[refman] Failed to update entry", vim.log.levels.ERROR)
+        vim.notify("[refman] " .. (err or "Failed to update entry"), vim.log.levels.ERROR)
       end
     end,
   })

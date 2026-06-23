@@ -98,6 +98,8 @@ function M.fetch_by_doi(doi)
   return M.fetch_by_pmid(idlist[1])
 end
 
+M.fetch = M.fetch_by_doi
+
 ---Fetch metadata by PubMed ID.
 ---@param pmid string|integer
 ---@return RefmanEntry?

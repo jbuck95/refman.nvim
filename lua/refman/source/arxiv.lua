@@ -55,6 +55,29 @@ function M.fetch_by_id(arxiv_id)
   return M._parse_atom(raw)
 end
 
+---Fetch metadata from a DOI (extracts arXiv ID from DOI suffix).
+---@param doi string
+---@return RefmanEntry?
+function M.fetch(doi)
+  doi = doi:gsub("^https?://doi%.org/", "")
+    :gsub("^doi:", "")
+    :gsub("^DOI:", "")
+    :gsub("[.,;:)%]%[\"?!']+$", "")
+    :gsub("^%s+", "")
+    :gsub("%s+$", "")
+
+  if not doi:match("^10%.48550/") then
+    return nil
+  end
+
+  local arxiv_id = doi:match("/arXiv%.(.+)$") or doi:match("/arxiv%.(.+)$")
+  if not arxiv_id then
+    return nil
+  end
+
+  return M.fetch_by_id(arxiv_id)
+end
+
 ---Search arXiv by title.
 ---@param title string
 ---@return RefmanEntry?

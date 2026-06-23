@@ -75,10 +75,11 @@ local function detect_id_type(sel)
   if sel:match("^10%.[%d]+/") then
     return "doi"
   end
-  if sel:match("^%d%d%d%d%d%d%d%d%d%d%d%d%d$") then
+  local cleaned = sel:gsub("[%s%-%.]", "")
+  if cleaned:match("^%d%d%d%d%d%d%d%d%d%d%d%d%d$") then
     return "isbn"
   end
-  if sel:match("^%d%d%d%d%d%d%d%d%d[%dX]$") then
+  if cleaned:match("^%d%d%d%d%d%d%d%d%d[%dX]$") then
     return "isbn"
   end
   return "doi"
