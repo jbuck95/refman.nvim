@@ -5,7 +5,7 @@ Fetch Citations from DOI/ISBN and manage references.
 
 DOI/ISBN → Source APIs (crossref, openalex, OpenLibrary) → CSL via citation-js → formatted citation in buffer.
 
-![refman.nvim demo](https://github.com/user-attachments/assets/902be61e-a113-4945-b520-a9060c7b373b)
+![demo](https://github.com/user-attachments/assets/902be61e-a113-4945-b520-a9060c7b373b)
 
 ## Requirements
 
