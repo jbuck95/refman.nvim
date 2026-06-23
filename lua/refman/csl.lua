@@ -13,6 +13,12 @@ local function get_npm_root()
   if npm_root then
     return npm_root
   end
+  local plugin_root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
+  local local_nm = plugin_root .. "/node_modules"
+  if vim.fn.isdirectory(local_nm) == 1 then
+    npm_root = local_nm
+    return npm_root
+  end
   local f = io.popen("npm root -g 2>/dev/null")
   if f then
     npm_root = f:read("*l"):gsub("%s+$", "")

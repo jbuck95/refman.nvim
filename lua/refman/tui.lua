@@ -49,6 +49,8 @@ function M.citation_tui(id_type, identifier)
     }
   end
 
+  local keys_cfg = cfg.keys.tui
+
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].bufhidden = "wipe"
@@ -176,7 +178,6 @@ function M.citation_tui(id_type, identifier)
       end
 
       local exists = already_in_db()
-      local keys_cfg = cfg.keys.tui
 
       clear_buf_keymaps(buf)
       if exists then

@@ -36,8 +36,8 @@ function M.check()
   vim.health.start("CSL formatting (citation-js)")
   if vim.fn.executable("node") == 1 then
     vim.health.ok("node")
-    local csl_ok = vim.fn.system([[node -e "require('@citation-js/core');require('@citation-js/plugin-csl');console.log('ok')" 2>/dev/null]]):gsub("%s+$", "")
-    if csl_ok == "ok" then
+    local csl = require("refman.csl")
+    if csl.is_available() then
       vim.health.ok("citation-js packages available")
     else
       vim.health.error("citation-js packages not found (run: npm install -g @citation-js/core @citation-js/plugin-csl)")

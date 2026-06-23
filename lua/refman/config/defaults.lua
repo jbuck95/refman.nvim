@@ -82,7 +82,7 @@
 ---@field added_at     string?
 ---@field updated_at   string?
 
-local plugin_root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
+local plugin_root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h:h")
 
 return {
   log_level = "verbose",

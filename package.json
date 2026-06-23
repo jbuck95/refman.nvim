@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "dependencies": {
+    "@citation-js/core": "^0.7.0",
+    "@citation-js/plugin-csl": "^0.7.0"
+  }
+}
