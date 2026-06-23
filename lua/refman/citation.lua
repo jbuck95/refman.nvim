@@ -187,19 +187,39 @@ local function parse_openlibrary(data, isbn)
       table.insert(authors_list, a.name)
     end
   end
-  if #authors_list <= 1 and item.by_statement then
+
+  if item.by_statement then
     local bs = item.by_statement:gsub("%.$", "")
+    if bs:lower():match("^edited by") or bs:lower():match("^edited ") then
+      entry.pub_type = "edited-book"
+    end
+  end
+
+  if #authors_list == 0 and item.by_statement then
+    local bs = item.by_statement:gsub("%.$", "")
+    local stripped = bs:gsub("^[Ee]dited by ", "")
+    if stripped == bs then
+      stripped = bs:gsub("^[Ee]dited ", "")
+    end
+    bs = stripped
+
     for _, sep in ipairs({"/", "; ", ";", ", "}) do
-      local parts = {}
-      for part in bs:gmatch("[^" .. sep .. "]+") do
-        part = part:match("^%s*(.-)%s*$")
-        if part ~= "" then
-          table.insert(parts, part)
+      local parts = vim.split(bs, sep, { plain = true, trimempty = true })
+      if #parts > 1 then
+        for _, part in ipairs(parts) do
+          part = part:match("^%s*(.-)%s*$")
+          if part ~= "" then
+            table.insert(authors_list, part)
+          end
         end
-      end
-      if #parts > #authors_list then
-        authors_list = parts
         break
+      end
+    end
+
+    if #authors_list == 0 then
+      local name = bs:match("^%s*(.-)%s*$")
+      if name and name ~= "" then
+        authors_list = { name }
       end
     end
   end

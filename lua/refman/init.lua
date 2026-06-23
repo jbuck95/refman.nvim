@@ -64,6 +64,26 @@ local function init_submodules()
   sqlite.init()
 end
 
+-- ── id detection ─────────────────────────────────────────────────────────────
+
+---@param sel string
+---@return "doi"|"isbn"
+local function detect_id_type(sel)
+  if sel:match("^doi:") or sel:match("^DOI:") or sel:match("^https?://doi%.org/") then
+    return "doi"
+  end
+  if sel:match("^10%.[%d]+/") then
+    return "doi"
+  end
+  if sel:match("^%d%d%d%d%d%d%d%d%d%d%d%d%d$") then
+    return "isbn"
+  end
+  if sel:match("^%d%d%d%d%d%d%d%d%d[%dX]$") then
+    return "isbn"
+  end
+  return "doi"
+end
+
 -- ── public API ───────────────────────────────────────────────────────────────
 
 function M.convert_doi_citation()
@@ -71,6 +91,10 @@ function M.convert_doi_citation()
   local sel = _db.get_visual_selection()
   if sel == "" then
     return
+  end
+  local id_type = detect_id_type(sel)
+  if id_type == "isbn" then
+    vim.notify("[refman] Selected text looks like an ISBN, not a DOI. Use :RefCite or :ISBN instead.", vim.log.levels.WARN)
   end
   _tui.citation_tui("doi", sel)
 end
@@ -81,6 +105,10 @@ function M.convert_isbn_citation()
   if sel == "" then
     return
   end
+  local id_type = detect_id_type(sel)
+  if id_type == "doi" then
+    vim.notify("[refman] Selected text looks like a DOI, not an ISBN. Use :RefCite or :DOI instead.", vim.log.levels.WARN)
+  end
   _tui.citation_tui("isbn", sel)
 end
 
@@ -90,7 +118,7 @@ function M.convert_citation()
   if sel == "" then
     return
   end
-  local id_type = sel:match("^%d[%dX]*$") and "isbn" or "doi"
+  local id_type = detect_id_type(sel)
   _tui.citation_tui(id_type, sel)
 end
 
@@ -126,9 +154,18 @@ function M.cite_inline_citation(style_key)
     return
   end
 
-  local id_type = sel:match("^%d[%dX]*$") and "isbn" or "doi"
+  local id_type = detect_id_type(sel)
   local fetcher = id_type == "doi" and _citation.fetch_doi_citation or _citation.fetch_isbn_citation
   local _, entry = fetcher(sel, style_key)
+
+  if not entry then
+    local alt_type = id_type == "doi" and "isbn" or "doi"
+    local alt_fetcher = alt_type == "doi" and _citation.fetch_doi_citation or _citation.fetch_isbn_citation
+    _, entry = alt_fetcher(sel, style_key)
+    if entry then
+      vim.notify("[refman] Detected as " .. id_type .. " but resolved via " .. alt_type, vim.log.levels.INFO)
+    end
+  end
 
   if not entry then
     vim.notify("[refman] Could not fetch metadata for: " .. sel, vim.log.levels.WARN)

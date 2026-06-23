@@ -59,6 +59,7 @@ function M.citation_tui(id_type, identifier)
   local citation_text = nil
   local fetched_entry = nil
   local max_width = math.min(80, vim.o.columns - 8)
+  local keys_cfg = cfg.keys.tui
 
   local function set_content(lines)
     vim.bo[buf].modifiable = true
@@ -341,6 +342,19 @@ function M.citation_tui(id_type, identifier)
       log.error("fetch crash: " .. tostring(text))
       text = nil
     end
+
+    if not text then
+      local alt_type = id_type == "doi" and "isbn" or "doi"
+      local alt_fetcher = alt_type == "doi" and citation.fetch_doi_citation or citation.fetch_isbn_citation
+      log.info("Retrying as " .. alt_type)
+      local ok2, text2, entry2 = pcall(alt_fetcher, identifier, style.key)
+      if ok2 and text2 then
+        text = text2
+        entry = entry2
+        vim.notify("[refman] Resolved via " .. alt_type, vim.log.levels.INFO)
+      end
+    end
+
     citation_text = text
     fetched_entry = entry
     show_result()

@@ -132,6 +132,7 @@ function M.open(opts)
         }
       end,
     }),
+    sorting_strategy = "ascending",
     sorter = conf.generic_sorter({}),
     previewer = require("telescope.previewers").new_buffer_previewer({
       title = "Entry Details",
