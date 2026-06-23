@@ -7,6 +7,28 @@ DOI/ISBN → Source APIs (crossref, openalex, OpenLibrary) → CSL via citation-
 
 ![demo](media/demo.gif)
 
+## How it works
+
+```
+:DOI / :ISBN
+  │
+  ▼
+Source APIs (opt-in via source_apis)
+  ├── crossref  — DOI metadata (title, author, journal, year, ...)
+  ├── openalex  — DOI metadata (additional source)
+  └── OpenLibrary — ISBN metadata (direct curl, no Python)
+  │
+  ▼
+CSL formatting (citation-js via Node)
+  ├── reads CSL-JSON from source data
+  ├── formats with .csl style file (din-1505-2, apa, chicago, mla)
+  └── output: formatted citation string or inline (Author, Year)
+  │
+  ▼
+Buffer — citation inserted at cursor
+Database (SQLite) — entry saved with metadata
+```
+
 ## Requirements
 
 ### System
@@ -27,14 +49,14 @@ Verify: `:checkhealth refman`
 
 ## Install
 
+`opts` auto-calls `require("refman").setup(opts)` — no `config` function needed.
+
 ### lazy.nvim (minimal)
 
 ```lua
 {
     "jbuck95/refman.nvim",
-    dependencies = {
-        "nvim-telescope/telescope.nvim",
-    },
+    dependencies = { "nvim-telescope/telescope.nvim" },
     cmd = { "DOI", "ISBN", "RefCite", "RefBrowse", "RefSearch", "RefImport" },
     keys = {
         { "<leader>rs", "<Plug>(RefmanImport)", desc = "Save line as citation" },
@@ -45,14 +67,12 @@ Verify: `:checkhealth refman`
 }
 ```
 
-### lazy.nvim (with custom config)
+### lazy.nvim (full custom config)
 
 ```lua
 {
     "jbuck95/refman.nvim",
-    dependencies = {
-        "nvim-telescope/telescope.nvim",
-    },
+    dependencies = { "nvim-telescope/telescope.nvim" },
     cmd = { "DOI", "ISBN", "RefCite", "RefBrowse", "RefSearch", "RefImport" },
     keys = {
         { "<leader>rs", "<Plug>(RefmanImport)", desc = "Save line as citation" },
@@ -60,17 +80,57 @@ Verify: `:checkhealth refman`
         { "<leader>ri", "<Plug>(RefmanExport)", desc = "Insert citation" },
         { "<leader>rc", "<Plug>(RefmanCite)",  desc = "Insert inline citation" },
     },
-    config = function()
-        require("refman").setup({
-            log_level = "error",
-            db_file = "~/my-bibliography.md",
-            csl = {
-                default_style = "din-1505-2",
+    opts = {
+        log_level = "verbose",                    -- "verbose" | "info" | "warn" | "error"
+        db_file = "~/Documents/bibliography.md",  -- SQLite database path
+
+        source_apis = {
+            crossref = { enabled = true },
+            openalex = { enabled = true },
+            arxiv    = { enabled = true },
+            pubmed   = { enabled = false },
+        },
+
+        csl = {
+            enabled = true,
+            default_style = "din-1505-2",
+            cite_mode = "full",                    -- "full" | "inline" | "both"
+            inline_format = "{author} ({year})",   -- fallback template
+            styles = {
+                { name = "DIN 1505-2 (German)",     key = "din-1505-2", lang = "de-DE" },
+                { name = "Chicago (notes)",          key = "chicago",    lang = "en-US" },
+                { name = "MLA (Modern Lang. Assoc.)", key = "mla",       lang = "en-US" },
+                { name = "APA 7th Edition",          key = "apa",        lang = "en-US" },
             },
-        })
-    end,
+        },
+
+        keys = {
+            telescope = {
+                detail       = "<C-g>",
+                delete       = "<C-d>",
+                bibliography = "<C-b>",
+                toggle_multi = "<Tab>",
+            },
+            tui = {
+                edit = "e", save = "s", retry = "r", quit = "q",
+                select = "<CR>",
+                select_1 = "1", select_2 = "2", select_3 = "3",
+                select_4 = "4", select_5 = "5", select_6 = "6",
+                select_7 = "7", select_8 = "8", select_9 = "9",
+            },
+            detail = {
+                close         = "q",
+                close_alt     = "<Esc>",
+                edit          = "e",
+                copy_citation = "c",
+                delete        = "d",
+            },
+        },
+    },
 }
 ```
+
+> **Note:** `styles[].path` defaults to the plugin's `csl/` directory — only set it for custom CSL files.
 
 ## Usage
 
@@ -128,27 +188,6 @@ refman.open_log()
 refman.setup({ db_file = "~/my-bib.md" })
 ```
 
-## How it works
-
-```
-:DOI / :ISBN
-  │
-  ▼
-Source APIs (opt-in via source_apis)
-  ├── crossref  — DOI metadata (title, author, journal, year, ...)
-  ├── openalex  — DOI metadata (additional source)
-  └── OpenLibrary — ISBN metadata (direct curl, no Python)
-  │
-  ▼
-CSL formatting (citation-js via Node)
-  ├── reads CSL-JSON from source data
-  ├── formats with .csl style file (din-1505-2, apa, chicago, mla)
-  └── output: formatted citation string or inline (Author, Year)
-  │
-  ▼
-Buffer — citation inserted at cursor
-Database (SQLite) — entry saved with metadata
-```
 
 ## Configuration
 
