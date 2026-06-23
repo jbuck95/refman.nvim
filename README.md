@@ -6,7 +6,7 @@ Fetch Citations from DOI/ISBN and manage references.
 DOI/ISBN → Source APIs (crossref, openalex, OpenLibrary) → CSL via citation-js → formatted citation in buffer.
 
 ![demo](media/demo.gif)
-Excuse my german aaahh typing papers.
+Excuse my german typing papers.
 
 All fields including abstract are fetched if available on default.
 
