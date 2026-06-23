@@ -1,6 +1,5 @@
 # refman.nvim
 
-[[DEMO]]
 
 Fetch Citations from DOI/ISBN and manage references.
 
