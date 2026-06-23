@@ -176,105 +176,122 @@ function M.citation_tui(id_type, identifier)
       end
 
       local exists = already_in_db()
+      local keys_cfg = cfg.keys.tui
 
       clear_buf_keymaps(buf)
       if exists then
         table.insert(lines, "[Already in bibliography]")
         table.insert(lines, "")
-        table.insert(lines, "[e] Edit   [q] Cancel")
+        if keys_cfg.edit then
+          table.insert(lines, "[" .. keys_cfg.edit .. "] Edit   [" .. (keys_cfg.quit or "q") .. "] Cancel")
+        end
 
-        vim.keymap.set("n", "e", function()
-          do_insert()
-          vim.api.nvim_win_close(win, true)
-          local entries = db.get_all_entries()
-          local matched = nil
-          if fetched_entry then
-            for _, e in ipairs(entries) do
-              if e.doi and fetched_entry.doi and e.doi == fetched_entry.doi then
-                matched = e
-                break
-              end
-              if e.title and fetched_entry.title and e.title == fetched_entry.title
-                and e.author and fetched_entry.author and e.author == fetched_entry.author then
-                matched = e
-                break
-              end
-            end
-          end
-          if not matched then
-            local clean_id = identifier:gsub("^https?://doi%.org/", ""):gsub("^doi:", ""):gsub("^DOI:", "")
-            for _, e in ipairs(entries) do
-              if e.doi and (e.doi == identifier or e.doi == clean_id) then
-                matched = e
-                break
-              end
-              if e.isbn_doi and (e.isbn_doi == identifier or e.isbn_doi == clean_id) then
-                matched = e
-                break
+        if keys_cfg.edit then
+          vim.keymap.set("n", keys_cfg.edit, function()
+            do_insert()
+            vim.api.nvim_win_close(win, true)
+            local entries = db.get_all_entries()
+            local matched = nil
+            if fetched_entry then
+              for _, e in ipairs(entries) do
+                if e.doi and fetched_entry.doi and e.doi == fetched_entry.doi then
+                  matched = e
+                  break
+                end
+                if e.title and fetched_entry.title and e.title == fetched_entry.title
+                  and e.author and fetched_entry.author and e.author == fetched_entry.author then
+                  matched = e
+                  break
+                end
               end
             end
-          end
-          if matched then
-            detail.view_entry(matched)
-          else
-            vim.notify("[refman] Could not find entry in database", vim.log.levels.WARN)
-          end
-        end, { buffer = buf })
+            if not matched then
+              local clean_id = identifier:gsub("^https?://doi%.org/", ""):gsub("^doi:", ""):gsub("^DOI:", "")
+              for _, e in ipairs(entries) do
+                if e.doi and (e.doi == identifier or e.doi == clean_id) then
+                  matched = e
+                  break
+                end
+                if e.isbn_doi and (e.isbn_doi == identifier or e.isbn_doi == clean_id) then
+                  matched = e
+                  break
+                end
+              end
+            end
+            if matched then
+              detail.view_entry(matched)
+            else
+              vim.notify("[refman] Could not find entry in database", vim.log.levels.WARN)
+            end
+          end, { buffer = buf })
+        end
       else
-        table.insert(lines, "[s] Save   [e] Save & Edit   [q] Cancel")
+        if keys_cfg.save and keys_cfg.edit then
+          table.insert(lines, "[" .. keys_cfg.save .. "] Save   [" .. keys_cfg.edit .. "] Save & Edit   [" .. (keys_cfg.quit or "q") .. "] Cancel")
+        end
 
-        vim.keymap.set("n", "s", function()
-          do_insert()
-          do_save()
-          vim.api.nvim_win_close(win, true)
-        end, { buffer = buf })
-        vim.keymap.set("n", "e", function()
-          do_insert()
-          local title = do_save()
-          vim.api.nvim_win_close(win, true)
-          local entries = db.get_all_entries()
-          local matched = nil
-          if fetched_entry then
-            for _, e in ipairs(entries) do
-              if e.doi and fetched_entry.doi and e.doi == fetched_entry.doi then
-                matched = e
-                break
-              end
-              if e.title and fetched_entry.title and e.title == fetched_entry.title
-                and e.author and fetched_entry.author and e.author == fetched_entry.author then
-                matched = e
-                break
-              end
-            end
-          end
-          if not matched then
-            for _, e in ipairs(entries) do
-              if e.title and e.title == title then
-                matched = e
-                break
+        if keys_cfg.save then
+          vim.keymap.set("n", keys_cfg.save, function()
+            do_insert()
+            do_save()
+            vim.api.nvim_win_close(win, true)
+          end, { buffer = buf })
+        end
+        if keys_cfg.edit then
+          vim.keymap.set("n", keys_cfg.edit, function()
+            do_insert()
+            local title = do_save()
+            vim.api.nvim_win_close(win, true)
+            local entries = db.get_all_entries()
+            local matched = nil
+            if fetched_entry then
+              for _, e in ipairs(entries) do
+                if e.doi and fetched_entry.doi and e.doi == fetched_entry.doi then
+                  matched = e
+                  break
+                end
+                if e.title and fetched_entry.title and e.title == fetched_entry.title
+                  and e.author and fetched_entry.author and e.author == fetched_entry.author then
+                  matched = e
+                  break
+                end
               end
             end
-          end
-          if matched then
-            detail.view_entry(matched)
-          else
-            vim.notify("[refman] Entry saved, but could not open detail view", vim.log.levels.WARN)
-          end
-        end, { buffer = buf })
+            if not matched then
+              for _, e in ipairs(entries) do
+                if e.title and e.title == title then
+                  matched = e
+                  break
+                end
+              end
+            end
+            if matched then
+              detail.view_entry(matched)
+            else
+              vim.notify("[refman] Entry saved, but could not open detail view", vim.log.levels.WARN)
+            end
+          end, { buffer = buf })
+        end
       end
     else
       table.insert(lines, "Could not resolve " .. id_type:upper())
       table.insert(lines, "")
-      table.insert(lines, "[r] Retry   [q] Cancel")
+      if keys_cfg.retry then
+        table.insert(lines, "[" .. keys_cfg.retry .. "] Retry   [" .. (keys_cfg.quit or "q") .. "] Cancel")
+      end
 
       clear_buf_keymaps(buf)
-      vim.keymap.set("n", "r", function()
-        show_styles()
+      if keys_cfg.retry then
+        vim.keymap.set("n", keys_cfg.retry, function()
+          show_styles()
+        end, { buffer = buf })
+      end
+    end
+    if keys_cfg.quit then
+      vim.keymap.set("n", keys_cfg.quit, function()
+        vim.api.nvim_win_close(win, true)
       end, { buffer = buf })
     end
-    vim.keymap.set("n", "q", function()
-      vim.api.nvim_win_close(win, true)
-    end, { buffer = buf })
     set_content(lines)
   end
 
@@ -286,20 +303,27 @@ function M.citation_tui(id_type, identifier)
 
     clear_buf_keymaps(buf)
     for i = 1, #styles do
-      vim.keymap.set("n", tostring(i), function()
-        on_style_selected(i)
-      end, { buffer = buf, nowait = true })
-    end
-    vim.keymap.set("n", "<CR>", function()
-      local line = vim.api.nvim_get_current_line()
-      local idx = tonumber(line:match("^%s*(%d+)%."))
-      if idx and idx <= #styles then
-        on_style_selected(idx)
+      local select_key = keys_cfg["select_" .. i]
+      if select_key then
+        vim.keymap.set("n", select_key, function()
+          on_style_selected(i)
+        end, { buffer = buf, nowait = true })
       end
-    end, { buffer = buf })
-    vim.keymap.set("n", "q", function()
-      vim.api.nvim_win_close(win, true)
-    end, { buffer = buf })
+    end
+    if keys_cfg.select then
+      vim.keymap.set("n", keys_cfg.select, function()
+        local line = vim.api.nvim_get_current_line()
+        local idx = tonumber(line:match("^%s*(%d+)%."))
+        if idx and idx <= #styles then
+          on_style_selected(idx)
+        end
+      end, { buffer = buf })
+    end
+    if keys_cfg.quit then
+      vim.keymap.set("n", keys_cfg.quit, function()
+        vim.api.nvim_win_close(win, true)
+      end, { buffer = buf })
+    end
 
     set_content(lines)
     vim.api.nvim_win_set_cursor(win, { 3, 0 })

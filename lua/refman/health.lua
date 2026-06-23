@@ -20,20 +20,16 @@ function M.check()
   -- SQLite
   vim.health.start("SQLite backend")
   local defaults = require("refman.config.defaults")
-  if defaults.db_backend == "sqlite" then
-    if vim.fn.executable("sqlite3") == 1 then
-      vim.health.ok("sqlite3 CLI available")
-      local sqlite_path = defaults.db_file:gsub("%.md$", ".sqlite3")
-      if vim.fn.filereadable(sqlite_path) == 1 then
-        vim.health.ok("SQLite database: " .. sqlite_path)
-      else
-        vim.health.info("SQLite database will be created on first use: " .. sqlite_path)
-      end
+  if vim.fn.executable("sqlite3") == 1 then
+    vim.health.ok("sqlite3 CLI available")
+    local sqlite_path = defaults.db_file:gsub("%.md$", ".sqlite3")
+    if vim.fn.filereadable(sqlite_path) == 1 then
+      vim.health.ok("SQLite database: " .. sqlite_path)
     else
-      vim.health.error("sqlite3 CLI not found but db_backend is 'sqlite'")
+      vim.health.info("SQLite database will be created on first use: " .. sqlite_path)
     end
   else
-    vim.health.info("using markdown backend (set db_backend = 'sqlite' for SQLite)")
+    vim.health.error("sqlite3 CLI not found")
   end
 
   -- CSL (now mandatory)
@@ -91,15 +87,6 @@ function M.check()
 
   -- Config validation
   vim.health.start("Configuration")
-
-  local db_file = vim.fn.expand(defaults.db_file)
-  if defaults.db_backend == "markdown" then
-    if vim.fn.filereadable(db_file) == 1 then
-      vim.health.ok("bibliography database: " .. db_file)
-    else
-      vim.health.info("bibliography database " .. db_file .. " will be auto-created on first use")
-    end
-  end
 
   if type(defaults.log_level) == "string" then
     vim.health.ok("log_level = " .. defaults.log_level)

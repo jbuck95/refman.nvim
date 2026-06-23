@@ -28,7 +28,7 @@ local function wrap_text(text, width)
 end
 
 local function format_bibliography_csl(picked)
-  local cfg = require("refman.config.defaults")
+  local cfg = require("refman").config
   if not cfg.csl or not cfg.csl.enabled then
     return nil
   end
@@ -83,10 +83,22 @@ function M.open(opts)
     return
   end
 
-  local detail = require("refman.ui.detail")
+  local detail_ui = require("refman.ui.detail")
+  local keys_cfg = require("refman").config.keys.telescope
+
+  local prompt_title = "Bibliography"
+  if keys_cfg.detail then
+    prompt_title = prompt_title .. " | " .. keys_cfg.detail .. " Detail"
+  end
+  if keys_cfg.toggle_multi then
+    prompt_title = prompt_title .. " | " .. keys_cfg.toggle_multi .. " Multi"
+  end
+  if keys_cfg.bibliography then
+    prompt_title = prompt_title .. " | " .. keys_cfg.bibliography .. " Biblio"
+  end
 
   pickers.new({}, {
-    prompt_title = "Bibliography | ^G Edit  Tab Multi  ^B Bibliography",
+    prompt_title = prompt_title,
     results_title = "Entries",
     preview_title = "Entry Details",
     layout_strategy = "horizontal",
@@ -264,60 +276,68 @@ function M.open(opts)
         end
       end
 
-      vim.keymap.set({ "i", "n" }, "<C-g>", on_selection(function(sel)
-        actions.close(prompt_bufnr)
-        detail.view_entry(sel.value)
-      end), { buffer = prompt_bufnr })
-
-      vim.keymap.set({ "i", "n" }, "<C-d>", on_selection(function(sel)
-        local e = sel.value
-        local confirm = vim.fn.confirm("Delete '" .. (e.title or "this entry") .. "'?", "&Yes\n&No", 2)
-        if confirm == 1 then
-          if e.id then
-            backend().delete_entry(e.id)
-          end
-          vim.notify("Entry deleted: " .. e.title, vim.log.levels.INFO)
+      if keys_cfg.detail then
+        vim.keymap.set({ "i", "n" }, keys_cfg.detail, on_selection(function(sel)
           actions.close(prompt_bufnr)
-          M.open(opts)
-        end
-      end), { buffer = prompt_bufnr })
+          detail_ui.view_entry(sel.value)
+        end), { buffer = prompt_bufnr })
+      end
 
-      vim.keymap.set("i", "<Tab>", function() actions.toggle_selection(prompt_bufnr) end, { buffer = prompt_bufnr })
-      vim.keymap.set("n", "<Tab>", function() actions.toggle_selection(prompt_bufnr) end, { buffer = prompt_bufnr })
-
-      vim.keymap.set({ "i", "n" }, "<C-b>", function()
-        local picker = action_state.get_current_picker(prompt_bufnr)
-        local selected = picker:get_multi_selection()
-        if not selected or #selected == 0 then
-          local sel = action_state.get_selected_entry()
-          selected = sel and { sel } or {}
-        end
-        if #selected == 0 then
-          return
-        end
-        local picked = {}
-        for _, s in ipairs(selected) do
-          table.insert(picked, s.value)
-        end
-
-        local bib_lines = format_bibliography_csl(picked)
-        if not bib_lines or #bib_lines == 0 then
-          vim.notify("[refman] CSL formatting failed. Is citation-js installed?", vim.log.levels.WARN)
-          return
-        end
-
-        actions.close(prompt_bufnr)
-        local row = vim.api.nvim_win_get_cursor(0)[1]
-        for i, l in ipairs(bib_lines) do
-          vim.api.nvim_buf_set_lines(0, row, row, false, { l })
-          row = row + 1
-          if i < #bib_lines then
-            vim.api.nvim_buf_set_lines(0, row, row, false, { "" })
-            row = row + 1
+      if keys_cfg.delete then
+        vim.keymap.set({ "i", "n" }, keys_cfg.delete, on_selection(function(sel)
+          local e = sel.value
+          local confirm = vim.fn.confirm("Delete '" .. (e.title or "this entry") .. "'?", "&Yes\n&No", 2)
+          if confirm == 1 then
+            if e.id then
+              backend().delete_entry(e.id)
+            end
+            vim.notify("Entry deleted: " .. e.title, vim.log.levels.INFO)
+            actions.close(prompt_bufnr)
+            M.open(opts)
           end
-        end
-        vim.notify("Inserted bibliography with " .. #picked .. " entries", vim.log.levels.INFO)
-      end, { buffer = prompt_bufnr })
+        end), { buffer = prompt_bufnr })
+      end
+
+      if keys_cfg.toggle_multi then
+        vim.keymap.set("i", keys_cfg.toggle_multi, function() actions.toggle_selection(prompt_bufnr) end, { buffer = prompt_bufnr })
+        vim.keymap.set("n", keys_cfg.toggle_multi, function() actions.toggle_selection(prompt_bufnr) end, { buffer = prompt_bufnr })
+      end
+
+      if keys_cfg.bibliography then
+        vim.keymap.set({ "i", "n" }, keys_cfg.bibliography, function()
+          local picker = action_state.get_current_picker(prompt_bufnr)
+          local selected = picker:get_multi_selection()
+          if not selected or #selected == 0 then
+            local sel = action_state.get_selected_entry()
+            selected = sel and { sel } or {}
+          end
+          if #selected == 0 then
+            return
+          end
+          local picked = {}
+          for _, s in ipairs(selected) do
+            table.insert(picked, s.value)
+          end
+
+          local bib_lines = format_bibliography_csl(picked)
+          if not bib_lines or #bib_lines == 0 then
+            vim.notify("[refman] CSL formatting failed. Is citation-js installed?", vim.log.levels.WARN)
+            return
+          end
+
+          actions.close(prompt_bufnr)
+          local row = vim.api.nvim_win_get_cursor(0)[1]
+          for i, l in ipairs(bib_lines) do
+            vim.api.nvim_buf_set_lines(0, row, row, false, { l })
+            row = row + 1
+            if i < #bib_lines then
+              vim.api.nvim_buf_set_lines(0, row, row, false, { "" })
+              row = row + 1
+            end
+          end
+          vim.notify("Inserted bibliography with " .. #picked .. " entries", vim.log.levels.INFO)
+        end, { buffer = prompt_bufnr })
+      end
 
       return true
     end,

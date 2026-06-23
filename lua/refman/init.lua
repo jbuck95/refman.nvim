@@ -6,6 +6,7 @@ local M = {}
 
 ---@type RefmanConfig
 local config = vim.tbl_extend("keep", {}, require("refman.config.defaults"))
+M.config = config
 
 ---@param opts table?
 ---@return boolean
@@ -13,7 +14,6 @@ local function validate_config(opts)
   local ok, err = pcall(vim.validate, {
     log_level = { opts.log_level, "string", true },
     db_file = { opts.db_file, "string", true },
-    db_backend = { opts.db_backend, "string", true },
     source_apis = { opts.source_apis, "table", true },
     csl = { opts.csl, "table", true },
   })
@@ -59,19 +59,9 @@ local function init_submodules()
   _tui = require("refman.tui")
   _tui.set_config(config)
 
-  local expanded = vim.fn.expand(config.db_file)
-  if vim.fn.filereadable(expanded) == 0 and config.db_backend == "markdown" then
-    local file = io.open(expanded, "w")
-    if file then
-      file:write("# Bibliography Database\n\n")
-      file:write("<!-- Use :RefImport to add entries, :RefExport to insert citations, :RefOpen to edit -->\n\n")
-      file:close()
-    end
-  elseif config.db_backend == "sqlite" then
-    local sqlite = require("refman.db.sqlite")
-    sqlite.set_config(config)
-    sqlite.init()
-  end
+  local sqlite = require("refman.db.sqlite")
+  sqlite.set_config(config)
+  sqlite.init()
 end
 
 -- ── public API ───────────────────────────────────────────────────────────────
@@ -218,31 +208,6 @@ function M.clear_cache()
   vim.notify("Citation cache cleared", vim.log.levels.INFO)
 end
 
-function M.migrate_to_sqlite()
-  init_submodules()
-  local sqlite = require("refman.db.sqlite")
-  if not sqlite.is_available() then
-    vim.notify("[refman] sqlite3 CLI not found -- cannot migrate", vim.log.levels.ERROR)
-    return
-  end
-
-  local markdown = require("refman.db.markdown")
-  markdown.set_config(config)
-  local entries = markdown.read_all()
-
-  if #entries == 0 then
-    vim.notify("[refman] No entries in markdown database to migrate", vim.log.levels.WARN)
-    return
-  end
-
-  sqlite.set_config(config)
-  sqlite.init()
-  local count = sqlite.import_entries(entries)
-
-  config.db_backend = "sqlite"
-  vim.notify(string.format("[refman] Migrated %d entries to SQLite at %s", count, config.db_file:gsub("%.md$", ".sqlite3")), vim.log.levels.INFO)
-end
-
 function M.search_entries()
   init_submodules()
   local query = vim.fn.input("Refman search: ")
@@ -313,10 +278,6 @@ def_cmd("RefCacheClear", function()
   M.clear_cache()
 end)
 
-def_cmd("RefMigrate", function()
-  M.migrate_to_sqlite()
-end)
-
 -- ── <Plug> mappings ──────────────────────────────────────────────────────────
 
 vim.keymap.set("n", "<Plug>(RefmanDOI)", function()
@@ -349,10 +310,6 @@ end, { silent = true })
 
 vim.keymap.set("n", "<Plug>(RefmanMulti)", function()
   M.export_citations_multi()
-end, { silent = true })
-
-vim.keymap.set("n", "<Plug>(RefmanMigrate)", function()
-  M.migrate_to_sqlite()
 end, { silent = true })
 
 vim.keymap.set("n", "<Plug>(RefmanSearch)", function()
