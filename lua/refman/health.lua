@@ -8,80 +8,103 @@ function M.check()
   if vim.fn.executable("curl") == 1 then
     vim.health.ok("curl")
   else
-    vim.health.error("curl not found (required for DOI citations)")
+    vim.health.error("curl not found (required for API calls)")
   end
 
-  if vim.fn.executable("fetch-metadata") == 1 then
-    vim.health.ok("fetch-metadata")
+  if pcall(require, "telescope") then
+    vim.health.ok("telescope.nvim (required for :RefBrowse, :RefSearch, :RefOpen)")
   else
-    vim.health.warn("fetch-metadata not found (required for ISBN citations)")
-    vim.health.info("Install: pipx install <plugin-dir>/scripts/fetch-metadata")
+    vim.health.error("telescope.nvim not installed -- required for browsing bibliography")
   end
 
-  if vim.fn.executable("pipx") == 1 then
-    vim.health.ok("pipx (for fetch-metadata install)")
-  elseif vim.fn.executable("pip") == 1 then
-    vim.health.ok("pip (for fetch-metadata install)")
+  -- SQLite
+  vim.health.start("SQLite backend")
+  local defaults = require("refman.config.defaults")
+  if defaults.db_backend == "sqlite" then
+    if vim.fn.executable("sqlite3") == 1 then
+      vim.health.ok("sqlite3 CLI available")
+      local sqlite_path = defaults.db_file:gsub("%.md$", ".sqlite3")
+      if vim.fn.filereadable(sqlite_path) == 1 then
+        vim.health.ok("SQLite database: " .. sqlite_path)
+      else
+        vim.health.info("SQLite database will be created on first use: " .. sqlite_path)
+      end
+    else
+      vim.health.error("sqlite3 CLI not found but db_backend is 'sqlite'")
+    end
   else
-    vim.health.warn("neither pipx nor pip found - install fetch-metadata manually")
+    vim.health.info("using markdown backend (set db_backend = 'sqlite' for SQLite)")
   end
 
-  if vim.fn.executable("fzf") == 1 then
-    vim.health.ok("fzf")
+  -- CSL (now mandatory)
+  vim.health.start("CSL formatting (citation-js)")
+  if vim.fn.executable("node") == 1 then
+    vim.health.ok("node")
+    local csl_ok = vim.fn.system([[node -e "require('@citation-js/core');require('@citation-js/plugin-csl');console.log('ok')" 2>/dev/null]]):gsub("%s+$", "")
+    if csl_ok == "ok" then
+      vim.health.ok("citation-js packages available")
+    else
+      vim.health.error("citation-js packages not found (run: npm install -g @citation-js/core @citation-js/plugin-csl)")
+    end
   else
-    vim.health.error("fzf not found (required for citation selection)")
+    vim.health.error("node not found -- required for CSL formatting (citation-js)")
   end
 
-  if vim.fn.exists("*fzf#run") == 1 then
-    vim.health.ok("fzf.vim loaded")
+  if defaults.csl and defaults.csl.styles then
+    local styles_ok = 0
+    local styles_missing = 0
+    for _, s in ipairs(defaults.csl.styles) do
+      if vim.fn.filereadable(s.path) == 1 then
+        styles_ok = styles_ok + 1
+      else
+        styles_missing = styles_missing + 1
+        vim.health.warn("CSL style file not found: " .. s.path .. " (" .. s.name .. ")")
+      end
+    end
+    if styles_ok > 0 then
+      vim.health.ok(string.format("%d CSL styles available", styles_ok))
+    end
+    if styles_missing == #defaults.csl.styles then
+      vim.health.error("no CSL style files found -- citations will fail")
+    end
   else
-    vim.health.info("fzf.vim lazy-loaded by lazy.nvim (triggers on first use)")
+    vim.health.error("no CSL styles configured in csl.styles")
   end
 
-  if vim.fn.executable("bash") == 1 then
-    vim.health.ok("bash")
-  else
-    vim.health.warn("bash not found (used for fzf preview)")
+  if defaults.csl and defaults.csl.default_style then
+    vim.health.info("default CSL style: " .. defaults.csl.default_style)
+  end
+
+  if defaults.csl and defaults.csl.cite_mode then
+    vim.health.info("cite mode: " .. defaults.csl.cite_mode)
+  end
+
+  -- Source APIs
+  vim.health.start("Source APIs")
+  if defaults.source_apis then
+    for name, opts in pairs(defaults.source_apis) do
+      if opts.enabled then
+        vim.health.info(string.format("%s enabled", name))
+      end
+    end
   end
 
   -- Config validation
   vim.health.start("Configuration")
-  local defaults = require("refman.config.defaults")
 
   local db_file = vim.fn.expand(defaults.db_file)
-  if vim.fn.filereadable(db_file) == 1 then
-    vim.health.ok("bibliography database: " .. db_file)
-  else
-    vim.health.info("bibliography database " .. db_file .. " will be auto-created on first use")
+  if defaults.db_backend == "markdown" then
+    if vim.fn.filereadable(db_file) == 1 then
+      vim.health.ok("bibliography database: " .. db_file)
+    else
+      vim.health.info("bibliography database " .. db_file .. " will be auto-created on first use")
+    end
   end
 
   if type(defaults.log_level) == "string" then
     vim.health.ok("log_level = " .. defaults.log_level)
   else
     vim.health.error("log_level must be a string")
-  end
-
-  if type(defaults.doi_styles) == "table" and #defaults.doi_styles > 0 then
-    vim.health.ok(string.format("%d DOI citation styles configured", #defaults.doi_styles))
-  else
-    vim.health.error("no DOI citation styles configured")
-  end
-
-  if type(defaults.isbn_styles) == "table" and #defaults.isbn_styles > 0 then
-    vim.health.ok(string.format("%d ISBN citation styles configured", #defaults.isbn_styles))
-  else
-    vim.health.error("no ISBN citation styles configured")
-  end
-
-  -- API reachability
-  vim.health.start("API reachability")
-  local curl_ok = vim.fn.system(
-    "curl -s -o /dev/null -w '%{http_code}' --connect-timeout 5 https://citation.doi.org/format 2>/dev/null"
-  )
-  if vim.v.shell_error == 0 and vim.trim(curl_ok) ~= "000" then
-    vim.health.ok("citation.doi.org reachable (HTTP " .. vim.trim(curl_ok) .. ")")
-  else
-    vim.health.warn("citation.doi.org not reachable - DOI citations will fail")
   end
 end
 

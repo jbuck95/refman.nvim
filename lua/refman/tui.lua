@@ -4,6 +4,7 @@ local M = {}
 local log = require("refman.log")
 local db = require("refman.db")
 local citation = require("refman.citation")
+local detail = require("refman.ui.detail")
 local config
 
 ---@param cfg RefmanConfig
@@ -38,7 +39,15 @@ end
 ---@param identifier string
 function M.citation_tui(id_type, identifier)
   local cursor_pos = vim.api.nvim_win_get_cursor(0)
-  local styles = id_type == "doi" and config.doi_styles or config.isbn_styles
+  local cfg = config or require("refman.config.defaults")
+
+  local styles = {}
+  for _, s in ipairs(cfg.csl.styles or {}) do
+    styles[#styles + 1] = {
+      key = s.key,
+      name = s.name,
+    }
+  end
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].buftype = "nofile"
@@ -46,6 +55,7 @@ function M.citation_tui(id_type, identifier)
 
   local win = nil
   local citation_text = nil
+  local fetched_entry = nil
   local max_width = math.min(80, vim.o.columns - 8)
 
   local function set_content(lines)
@@ -90,9 +100,16 @@ function M.citation_tui(id_type, identifier)
     if not identifier or identifier == "" then
       return false
     end
-    local entries = db.read_markdown_db()
+    local clean_id = identifier:gsub("^https?://doi%.org/", ""):gsub("^doi:", ""):gsub("^DOI:", "")
+    local entries = db.get_all_entries()
     for _, e in ipairs(entries) do
       if e.isbn_doi and e.isbn_doi == identifier then
+        return true
+      end
+      if e.isbn_doi and clean_id and e.isbn_doi == clean_id then
+        return true
+      end
+      if e.doi and (e.doi == identifier or e.doi == clean_id) then
         return true
       end
     end
@@ -107,6 +124,14 @@ function M.citation_tui(id_type, identifier)
   end
 
   local function do_save()
+    if fetched_entry then
+      fetched_entry.citation = citation_text
+      fetched_entry.isbn_doi = fetched_entry.isbn_doi or identifier
+      fetched_entry.tags = db.get_frontmatter_tags()
+      db.add_entry(fetched_entry)
+      return fetched_entry.title or "Unknown"
+    end
+
     local author = citation_text:match("^(.-)%s*:") or "Unknown"
     local title = citation_text:match(":%s*(.-)%s*[%.;]")
       or citation_text:match(":%s*(.+)$")
@@ -133,6 +158,23 @@ function M.citation_tui(id_type, identifier)
       end
       table.insert(lines, "")
 
+      if fetched_entry then
+        if fetched_entry.abstract then
+          local ab = fetched_entry.abstract:sub(1, 200)
+          if #fetched_entry.abstract > 200 then ab = ab .. "..." end
+          table.insert(lines, "Abstract: " .. ab)
+          table.insert(lines, "")
+        end
+        if fetched_entry.keywords and #fetched_entry.keywords > 0 then
+          table.insert(lines, "Keywords: " .. table.concat(fetched_entry.keywords, ", "))
+          table.insert(lines, "")
+        end
+        if fetched_entry.pub_type then
+          table.insert(lines, "Type: " .. fetched_entry.pub_type .. (fetched_entry.year and (" | " .. fetched_entry.year) or ""))
+          table.insert(lines, "")
+        end
+      end
+
       local exists = already_in_db()
 
       clear_buf_keymaps(buf)
@@ -144,11 +186,39 @@ function M.citation_tui(id_type, identifier)
         vim.keymap.set("n", "e", function()
           do_insert()
           vim.api.nvim_win_close(win, true)
-          local title = citation_text:match(":%s*(.-)%s*[%.;]")
-            or citation_text:match(":%s*(.+)$")
-            or "Unknown"
-          db.open_database()
-          vim.fn.search(vim.fn.escape(title, ".*[]~\\"), "w")
+          local entries = db.get_all_entries()
+          local matched = nil
+          if fetched_entry then
+            for _, e in ipairs(entries) do
+              if e.doi and fetched_entry.doi and e.doi == fetched_entry.doi then
+                matched = e
+                break
+              end
+              if e.title and fetched_entry.title and e.title == fetched_entry.title
+                and e.author and fetched_entry.author and e.author == fetched_entry.author then
+                matched = e
+                break
+              end
+            end
+          end
+          if not matched then
+            local clean_id = identifier:gsub("^https?://doi%.org/", ""):gsub("^doi:", ""):gsub("^DOI:", "")
+            for _, e in ipairs(entries) do
+              if e.doi and (e.doi == identifier or e.doi == clean_id) then
+                matched = e
+                break
+              end
+              if e.isbn_doi and (e.isbn_doi == identifier or e.isbn_doi == clean_id) then
+                matched = e
+                break
+              end
+            end
+          end
+          if matched then
+            detail.view_entry(matched)
+          else
+            vim.notify("[refman] Could not find entry in database", vim.log.levels.WARN)
+          end
         end, { buffer = buf })
       else
         table.insert(lines, "[s] Save   [e] Save & Edit   [q] Cancel")
@@ -162,8 +232,34 @@ function M.citation_tui(id_type, identifier)
           do_insert()
           local title = do_save()
           vim.api.nvim_win_close(win, true)
-          db.open_database()
-          vim.fn.search(vim.fn.escape(title, ".*[]~\\"), "w")
+          local entries = db.get_all_entries()
+          local matched = nil
+          if fetched_entry then
+            for _, e in ipairs(entries) do
+              if e.doi and fetched_entry.doi and e.doi == fetched_entry.doi then
+                matched = e
+                break
+              end
+              if e.title and fetched_entry.title and e.title == fetched_entry.title
+                and e.author and fetched_entry.author and e.author == fetched_entry.author then
+                matched = e
+                break
+              end
+            end
+          end
+          if not matched then
+            for _, e in ipairs(entries) do
+              if e.title and e.title == title then
+                matched = e
+                break
+              end
+            end
+          end
+          if matched then
+            detail.view_entry(matched)
+          else
+            vim.notify("[refman] Entry saved, but could not open detail view", vim.log.levels.WARN)
+          end
         end, { buffer = buf })
       end
     else
@@ -210,18 +306,18 @@ function M.citation_tui(id_type, identifier)
   end
 
   on_style_selected = function(idx)
-    set_content({ "Identifier: " .. identifier, "", "Fetching citation...", "", "Style: " .. styles[idx].name })
+    local style = styles[idx]
+    set_content({ "Identifier: " .. identifier, "", "Fetching citation...", "", "Style: " .. style.name })
     vim.cmd("redraw")
 
-    local ok, result = pcall(
-      id_type == "doi" and citation.fetch_doi_citation or citation.fetch_isbn_citation,
-      identifier,
-      styles[idx]
-    )
+    local fetcher = id_type == "doi" and citation.fetch_doi_citation or citation.fetch_isbn_citation
+    local ok, text, entry = pcall(fetcher, identifier, style.key)
     if not ok then
-      log.error("fetch crash: " .. tostring(result))
+      log.error("fetch crash: " .. tostring(text))
+      text = nil
     end
-    citation_text = ok and result or nil
+    citation_text = text
+    fetched_entry = entry
     show_result()
   end
 

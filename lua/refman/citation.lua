@@ -3,13 +3,9 @@ local M = {}
 
 local log = require("refman.log")
 local db = require("refman.db")
+local config
 
 -- ── citation cache ────────────────────────────────────────────────────────────
-
-local plugin_root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
-local fetch_metadata_cmd = "PYTHONPATH="
-  .. plugin_root
-  .. "/scripts/fetch-metadata/src python3 -m metadata.cli"
 
 local cache_file = vim.fn.stdpath("cache") .. "/refman-cache.json"
 
@@ -35,250 +31,232 @@ local function save_cache(cache)
   end
 end
 
-local function cache_key(identifier, style_name)
-  return identifier .. "::" .. style_name
+local function cache_key(identifier, style_key)
+  return identifier .. "::" .. style_key
+end
+
+-- ── config helpers ────────────────────────────────────────────────────────────
+
+function M.set_config(cfg)
+  config = cfg
+end
+
+local function get_config()
+  return config or require("refman.config.defaults")
+end
+
+local function source_enabled(name)
+  local apis = get_config().source_apis
+  return apis and apis[name] and apis[name].enabled
+end
+
+-- ── CSL helpers ──────────────────────────────────────────────────────────────
+
+local function get_csl_style_config(style_key)
+  local cfg = get_config()
+  if not style_key then
+    style_key = cfg.csl.default_style or "din-1505-2"
+  end
+  if cfg.csl.styles then
+    for _, s in ipairs(cfg.csl.styles) do
+      if s.key == style_key then
+        return s
+      end
+    end
+  end
+  return nil
+end
+
+-- ── rich metadata fetch via source modules ────────────────────────────────────
+
+---Fetch a RefmanEntry from configured source modules.
+---@param doi string Clean DOI
+---@return RefmanEntry?
+function M.fetch_doi_entry(doi)
+  local sources = {
+    { name = "crossref", priority = 1 },
+    { name = "openalex", priority = 2 },
+  }
+
+  for _, src in ipairs(sources) do
+    if source_enabled(src.name) then
+      local ok, mod = pcall(require, "refman.source." .. src.name)
+      if ok and mod then
+        log.debug("Source " .. src.name .. ": fetching DOI " .. doi)
+        local entry = mod.fetch(doi)
+        if entry then
+          return entry
+        end
+      end
+    end
+  end
+
+  return nil
+end
+
+-- ── CSL-only formatting ──────────────────────────────────────────────────────
+
+---Format a RefmanEntry using CSL.
+---@param entry     RefmanEntry
+---@param style_key string Key of CSL style in config.csl.styles
+---@return string|nil
+function M.format_entry(entry, style_key)
+  local cfg = get_config()
+  local style = get_csl_style_config(style_key)
+  if not style then
+    log.warn("Unknown CSL style: " .. (style_key or "nil"))
+    return nil
+  end
+
+  local csl = require("refman.csl")
+  if not csl.is_available() then
+    log.error("citation-js not available — install: npm install -g @citation-js/core @citation-js/plugin-csl")
+    return nil
+  end
+
+  local result = csl.format(entry, style.path, style.lang)
+  if not result or result == "" then
+    log.error("CSL formatting failed for style " .. style_key)
+    return nil
+  end
+
+  return result
 end
 
 -- ── DOI citation fetching ────────────────────────────────────────────────────
 
----@param doi string
----@param style_config RefmanStyle
----@return string|nil
-function M.fetch_doi_citation(doi, style_config)
-  doi = doi:gsub("^https?://doi%.org/", "")
+local function clean_doi(raw)
+  return (raw:gsub("^https?://doi%.org/", "")
     :gsub("^doi:", "")
     :gsub("^DOI:", "")
     :gsub("[.,;:)%]%[\"?!']+$", "")
-  local ckey = cache_key(doi, style_config.name)
+    :gsub("^%s+", "")
+    :gsub("%s+$", ""))
+end
+
+---@param doi string
+---@param style_key string Key of CSL style
+---@return string|nil citation_text
+---@return RefmanEntry|nil entry
+function M.fetch_doi_citation(doi, style_key)
+  doi = clean_doi(doi)
+  local ckey = cache_key(doi, style_key or get_config().csl.default_style)
   local cache = load_cache()
   if cache[ckey] then
     log.debug("DOI cache hit: " .. ckey)
     return cache[ckey]
   end
-  local apis = {}
-  for _, api in ipairs(style_config.apis or {}) do
-    local url = api.url:gsub("{doi}", doi):gsub("{style}", api.style):gsub("{lang}", api.lang or "en-US")
-    table.insert(apis, 'curl -s -L "' .. url .. '"')
-  end
-  for i, cmd in ipairs(apis) do
-    log.debug(string.format("DOI API %d/%d for style '%s'", i, #apis, style_config.name or "unknown"))
-    local result = db.exec_cmd(cmd)
-    if
-      result
-      and result ~= ""
-      and not result:match("Error")
-      and not result:match("404")
-      and not result:match("Not Found")
-      and not result:match("<!DOCTYPE")
-      and not result:match("^%s*$")
-      and result:len() > 20
-    then
-      if not result:match("%d%d%d%d") then
-        log.debug("DOI API " .. i .. " rejected: no year found in result")
-      else
-        result = result
-          :gsub("&", "&")
-          :gsub("<", "<")
-          :gsub(">", ">")
-          :gsub("&quot;", "\"")
-          :gsub("'", "'")
-          :gsub("^%s+", "")
-          :gsub("%s+$", "")
-        log.debug("DOI fetch succeeded (API " .. i .. "/" .. #apis .. ")")
-        cache[ckey] = result
-        save_cache(cache)
-        return result
-      end
-    end
-    if result then
-      local reason = ""
-      if result:match("Error") then
-        reason = "response contains 'Error'"
-      elseif result:match("404") then
-        reason = "HTTP 404"
-      elseif result:match("Not Found") then
-        reason = "response contains 'Not Found'"
-      elseif result:match("<!DOCTYPE") then
-        reason = "response is HTML"
-      elseif result:match("^%s*$") then
-        reason = "response is whitespace"
-      elseif result:len() <= 20 then
-        reason = "response too short (" .. result:len() .. " chars)"
-      else
-        reason = "unknown filter"
-      end
-      log.debug(string.format("DOI API %d rejected: %s", i, reason))
-    end
+
+  local entry = M.fetch_doi_entry(doi)
+  if not entry then
+    log.warn("DOI " .. doi .. ": no metadata found from any source")
+    return nil
   end
 
-  log.debug("DOI " .. doi .. ": citation APIs exhausted, trying Crossref")
-  local crossref_raw = db.exec_cmd('curl -s -L "https://api.crossref.org/works/' .. doi .. '"')
-  if crossref_raw and crossref_raw ~= "" then
-    ---@diagnostic disable-next-line: redefined-local
-    local ok, data = pcall(vim.json.decode, crossref_raw)
-    if ok and data and data.message then
-      local msg = data.message
-      local title = msg.title and msg.title[1] or "Unknown Title"
-      local authors = {}
-      if msg.author then
-        for _, a in ipairs(msg.author) do
-          table.insert(authors, (a.family or "") .. (a.given and ", " .. a.given or ""))
-        end
-      end
-      local author_str = #authors > 0 and table.concat(authors, "; ") or "Unknown Author"
-      local year = "n.d."
-      local date_parts = msg["published-print"] or msg["published-online"] or msg["created"]
-      if date_parts and date_parts["date-parts"] and date_parts["date-parts"][1] then
-        year = tostring(date_parts["date-parts"][1][1] or "n.d.")
-      end
-      local publisher = msg.publisher or "Unknown Publisher"
-      local journal = msg["container-title"] and msg["container-title"][1]
-      local volume = msg.volume
-      local pages = msg.page
-      local template = style_config.template
-        or "{authors}: {title}. {publisher} {year}."
-      if journal then
-        template = "{authors}: {title}. *{journal}* {volume}"
-          .. (pages and ", " .. pages or "")
-          .. ". {year}."
-      end
-      local citation = template
-        :gsub("{authors}", author_str)
-        :gsub("{title}", title)
-        :gsub("{publisher}", publisher)
-        :gsub("{journal}", journal or "")
-        :gsub("{volume}", volume or "")
-        :gsub("{year}", year)
-      log.debug("DOI " .. doi .. ": Crossref fallback succeeded (not cached)")
-      return citation
-    else
-      log.debug("DOI " .. doi .. ": Crossref JSON parse failed")
-    end
+  local citation = M.format_entry(entry, style_key)
+  if not citation then
+    log.error("DOI " .. doi .. ": CSL formatting failed")
+    return nil
   end
 
-  log.warn(
-    string.format(
-      "DOI %s: all %d APIs + Crossref fallback failed for style '%s'",
-      doi,
-      #apis,
-      style_config.name or "unknown"
-    )
-  )
-  return nil
+  entry.citation = citation
+  cache[ckey] = citation
+  save_cache(cache)
+  return citation, entry
 end
 
 -- ── ISBN citation fetching ───────────────────────────────────────────────────
 
+local function parse_openlibrary(data, isbn)
+  local key = "ISBN:" .. isbn
+  local item = data[key]
+  if not item then
+    return nil
+  end
+
+  local entry = { isbn = isbn, source = "isbn", isbn_doi = isbn, pub_type = "book" }
+
+  entry.title = item.title
+  if item.subtitle then
+    entry.title = entry.title .. ": " .. item.subtitle
+  end
+
+  local authors_list = {}
+  if item.authors then
+    for _, a in ipairs(item.authors) do
+      table.insert(authors_list, a.name)
+    end
+  end
+  if #authors_list <= 1 and item.by_statement then
+    local bs = item.by_statement:gsub("%.$", "")
+    for _, sep in ipairs({"/", "; ", ";", ", "}) do
+      local parts = {}
+      for part in bs:gmatch("[^" .. sep .. "]+") do
+        part = part:match("^%s*(.-)%s*$")
+        if part ~= "" then
+          table.insert(parts, part)
+        end
+      end
+      if #parts > #authors_list then
+        authors_list = parts
+        break
+      end
+    end
+  end
+  entry.author = #authors_list > 0 and table.concat(authors_list, "; ") or nil
+
+  entry.publisher = (item.publishers and item.publishers[1] and item.publishers[1].name) or nil
+
+  if item.publish_date then
+    entry.year = item.publish_date:match("(%d%d%d%d)")
+  end
+
+  return entry
+end
+
 ---@param isbn string
----@param style_config RefmanStyle
----@return string|nil
-function M.fetch_isbn_citation(isbn, style_config)
+---@param style_key string Key of CSL style
+---@return string|nil citation_text
+---@return RefmanEntry|nil entry
+function M.fetch_isbn_citation(isbn, style_key)
   isbn = isbn:gsub("[^0-9X]", "")
-  local ckey = cache_key(isbn, style_config.name)
+  local ckey = cache_key(isbn, style_key or get_config().csl.default_style)
   local cache = load_cache()
   if cache[ckey] then
     log.debug("ISBN cache hit: " .. ckey)
     return cache[ckey]
   end
-  local cmd = fetch_metadata_cmd .. " --isbn " .. isbn .. (log.level == "verbose" and " -v" or "")
-  log.debug("ISBN lookup for " .. isbn .. " (style: " .. (style_config.name or "unknown") .. ")")
-  local result = db.exec_cmd(cmd)
-  if not result or result == "" then
-    log.debug("ISBN " .. isbn .. ": fetch-metadata failed, trying OpenLibrary fallback")
-    local ol_raw = db.exec_cmd(
-      'curl -s -L "https://openlibrary.org/api/books?bibkeys=ISBN:'
-        .. isbn
-        .. '&format=json&jscmd=data"'
-    )
-    if ol_raw and ol_raw ~= "" then
-      ---@diagnostic disable-next-line: redefined-local
-      local ok, data = pcall(vim.json.decode, ol_raw)
-      if ok and data then
-        local key = "ISBN:" .. isbn
-        local item = data[key]
-        if item then
-          local title = item.title or "Unknown Title"
-          if item.subtitle then
-            title = title .. ": " .. item.subtitle
-          end
-          local authors_list = {}
-          if item.authors then
-            for _, a in ipairs(item.authors) do
-              table.insert(authors_list, a.name or "Unknown Author")
-            end
-          end
-          if #authors_list <= 1 and item.by_statement then
-            local bs = item.by_statement:gsub("%.$", "")
-            for _, sep in ipairs({"/", "; ", ";", ", "}) do
-              local parts = {}
-              for part in bs:gmatch("[^" .. sep .. "]+") do
-                part = part:match("^%s*(.-)%s*$")
-                if part ~= "" then
-                  table.insert(parts, part)
-                end
-              end
-              if #parts > #authors_list then
-                authors_list = parts
-                break
-              end
-            end
-          end
-          local authors = #authors_list > 0 and table.concat(authors_list, "; ") or "Unknown Author"
-          local publisher = (item.publishers and item.publishers[1] and item.publishers[1].name)
-            or "Unknown Publisher"
-          local pub_date = item.publish_date or "Unknown Date"
-          local year = pub_date:match("(%d%d%d%d)") or "n.d."
-          local template = style_config.template or "{authors}. *{title}*. {publisher}, {year}."
-          local citation = template
-            :gsub("{authors}", authors)
-            :gsub("{title}", title)
-            :gsub("{publisher}", publisher)
-            :gsub("{year}", year)
-          log.debug("ISBN " .. isbn .. ": OpenLibrary fallback succeeded (not cached)")
-          return citation
-        else
-          log.debug("ISBN " .. isbn .. ": OpenLibrary returned no item for key " .. key)
-        end
-      else
-        log.debug("ISBN " .. isbn .. ": OpenLibrary JSON parse failed")
-      end
+
+  log.debug("ISBN lookup for " .. isbn)
+  local ol_raw = db.exec_cmd(
+    'curl -s -L --connect-timeout 10 "https://openlibrary.org/api/books?bibkeys=ISBN:'
+      .. isbn
+      .. '&format=json&jscmd=data"'
+  )
+
+  local entry = nil
+  if ol_raw and ol_raw ~= "" then
+    local ok, data = pcall(vim.json.decode, ol_raw)
+    if ok and data then
+      entry = parse_openlibrary(data, isbn)
     end
-    log.warn("ISBN " .. isbn .. ": fetch-metadata and OpenLibrary fallback both failed")
+  end
+
+  if not entry then
+    log.warn("ISBN " .. isbn .. ": OpenLibrary returned no data")
     return nil
   end
-  log.debug("ISBN raw output (" .. style_config.name .. "):\n" .. result)
-  local title = result:match("Title%s*:%s*(.-)\n")
-    or result:match("title%s*:%s*(.-)\n")
-    or "Unknown Title"
-  local authors = result:match("Author%(s%)%s*:%s*(.-)\n")
-    or result:match("author%s*:%s*(.-)\n")
-    or result:match("Authors?%s*:%s*(.-)\n")
-    or "Unknown Author"
-  local publisher = result:match("Publisher%s*:%s*(.-)\n")
-    or result:match("publisher%s*:%s*(.-)\n")
-    or "Unknown Publisher"
-  local pub_date = result:match("Published%s*:%s*(.-)\n")
-    or result:match("published%s*:%s*(.-)\n")
-    or "Unknown Date"
-  local year = pub_date:match("(%d%d%d%d)") or "n.d."
-  if title == "Unknown Title" then
-    log.debug("ISBN " .. isbn .. ": could not parse title from output")
+
+  local citation = M.format_entry(entry, style_key)
+  if not citation then
+    log.error("ISBN " .. isbn .. ": CSL formatting failed")
+    return nil
   end
-  if authors == "Unknown Author" then
-    log.debug("ISBN " .. isbn .. ": could not parse authors from output")
-  end
-  if publisher == "Unknown Publisher" then
-    log.debug("ISBN " .. isbn .. ": could not parse publisher from output")
-  end
-  local template = style_config.template or "{authors}. *{title}*. {publisher}, {year}."
-  local citation = template
-    :gsub("{authors}", authors)
-    :gsub("{title}", title)
-    :gsub("{publisher}", publisher)
-    :gsub("{year}", year)
+
+  entry.citation = citation
   cache[ckey] = citation
   save_cache(cache)
-  return citation
+  return citation, entry
 end
 
 ---Clear the citation cache file.
