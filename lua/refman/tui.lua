@@ -135,18 +135,15 @@ function M.citation_tui(id_type, identifier)
       return fetched_entry.title or "Unknown"
     end
 
-    local author = citation_text:match("^(.-)%s*:") or "Unknown"
-    local title = citation_text:match(":%s*(.-)%s*[%.;]")
-      or citation_text:match(":%s*(.+)$")
-      or "Unknown"
-    db.add_entry({
-      author = author,
-      title = title,
+    local entry = {
+      author = "Unknown",
+      title = citation_text,
       citation = citation_text,
       isbn_doi = identifier,
       tags = db.get_frontmatter_tags(),
-    })
-    return title
+    }
+    db.add_entry(entry)
+    return citation_text
   end
 
   local show_result, show_styles, on_style_selected

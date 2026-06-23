@@ -205,12 +205,8 @@ function M.import_current_line()
     entry.author = "Unknown Author"
   end
 
-  local title_match = line:match("%*([^%*]+)%*")
-    or line:match("\"([^\"]+)\"")
-    or line:match("^[^:]+:%s*(.-)%.")
-    or line:match("^[^%.]+%.%s*(.-)%.")
-  entry.title = title_match or "Unknown Title"
-  entry.citation = line:match("^%s*(.-)%s*$")
+  entry.title = line
+  entry.citation = line
   entry.source = "manual"
 
   if _db.add_entry(entry) then
