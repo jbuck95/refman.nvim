@@ -118,7 +118,7 @@ return {
       delete        = "d",
     },
   },
-  db_file = vim.fn.expand("~/Documents/bibliography.md"),
+  db_file = vim.fn.expand("~/Documents/bibliography.sqlite3"),
 
   source_apis = {
     crossref = { enabled = true },

@@ -6,7 +6,7 @@ Fetch Citations from DOI/ISBN and manage references.
 DOI/ISBN → Source APIs (crossref, openalex, OpenLibrary) → CSL via citation-js → formatted citation in buffer.
 
 ![demo](media/demo.gif)
-Excuse my german typing papers.
+Excuse my german
 
 All fields including abstract are fetched if available on default.
 
@@ -85,7 +85,7 @@ Verify: `:checkhealth refman`
     },
     opts = {
         log_level = "verbose",                    -- "verbose" | "info" | "warn" | "error"
-        db_file = "~/Documents/bibliography.md",  -- SQLite database path
+        db_file = "~/Documents/bibliography.sqlite3",  -- SQLite database path
 
         source_apis = {
             crossref = { enabled = true },
@@ -196,7 +196,7 @@ refman.setup({ db_file = "~/my-bib.md" })
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `db_file` | `~/Documents/bibliography.md` | SQLite database path |
+| `db_file` | `~/Documents/bibliography.sqlite3` | SQLite database path |
 | `log_level` | `"verbose"` | `"verbose"`, `"info"`, `"warn"`, `"error"` |
 | `csl.default_style` | `"din-1505-2"` | Key from `csl.styles` |
 | `csl.cite_mode` | `"full"` | `"full"`, `"inline"`, `"both"` |

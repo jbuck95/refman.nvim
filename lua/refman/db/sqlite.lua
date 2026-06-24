@@ -35,10 +35,10 @@ function M.set_config(cfg)
   config = cfg or vim.tbl_extend("keep", {}, require("refman.config.defaults"))
 end
 
----Resolve the SQLite database path (replace .md extension with .sqlite3).
+---Resolve the SQLite database path.
 ---@return string
 local function db_path()
-  return (config.db_file or vim.fn.expand("~/Documents/bibliography.md")):gsub("%.md$", ".sqlite3")
+  return config.db_file or vim.fn.expand("~/Documents/bibliography.sqlite3")
 end
 
 ---Execute a single SQL command and return stdout.

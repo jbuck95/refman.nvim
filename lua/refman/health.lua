@@ -22,7 +22,7 @@ function M.check()
   local defaults = require("refman.config.defaults")
   if vim.fn.executable("sqlite3") == 1 then
     vim.health.ok("sqlite3 CLI available")
-    local sqlite_path = defaults.db_file:gsub("%.md$", ".sqlite3")
+    local sqlite_path = defaults.db_file
     if vim.fn.filereadable(sqlite_path) == 1 then
       vim.health.ok("SQLite database: " .. sqlite_path)
     else
