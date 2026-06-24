@@ -8,7 +8,8 @@ DOI/ISBN → Source APIs (crossref, openalex, OpenLibrary) → CSL via citation-
 ![demo](media/demo.gif)
 Excuse my german
 
-All fields including abstract are fetched if available on default.
+metadata including abstract is fetched if available on default. You can manually edit
+everything later.
 
 ## How it works
 
@@ -279,6 +280,10 @@ csl = {
 vim.cmd([[set rtp+=~/.local/share/nvim/lazy/refman.nvim]])
 vim.keymap.set("n", "<leader>ri", "<Plug>(RefmanExport)")
 ```
+
+## Todo 
+
+- [ ] highlight all fields for default citation style.
 
 ## Credits
 
