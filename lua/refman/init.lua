@@ -143,11 +143,7 @@ end
 
 function M.convert_citation()
   init_submodules()
-  local sel = _db.get_visual_selection()
-  if sel == "" then
-    sel = vim.api.nvim_get_current_line()
-  end
-  local id, id_type = extract_id(sel)
+  local id, id_type = extract_id(vim.api.nvim_get_current_line())
   if not id then
     vim.notify("[refman] No DOI or ISBN found", vim.log.levels.WARN)
     return
@@ -159,11 +155,7 @@ end
 ---@param style_key string? CSL style key
 function M.cite_inline_citation(style_key)
   init_submodules()
-  local sel = _db.get_visual_selection()
-  if sel == "" then
-    sel = vim.api.nvim_get_current_line()
-  end
-  local id, id_type = extract_id(sel)
+  local id, id_type = extract_id(vim.api.nvim_get_current_line())
   if not id then
     vim.notify("[refman] No DOI or ISBN found", vim.log.levels.WARN)
     return
