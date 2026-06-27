@@ -12,7 +12,7 @@ function M.check()
   end
 
   if pcall(require, "telescope") then
-    vim.health.ok("telescope.nvim (required for :RefBrowse, :RefSearch, :RefOpen)")
+    vim.health.ok("telescope.nvim (required for :RefBrowse)")
   else
     vim.health.error("telescope.nvim not installed -- required for browsing bibliography")
   end

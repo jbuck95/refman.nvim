@@ -55,38 +55,34 @@ Verify: `:checkhealth refman`
 
 `opts` auto-calls `require("refman").setup(opts)` — no `config` function needed.
 
-### lazy.nvim (minimal)
+### lazy.nvim
 
 ```lua
 {
     "jbuck95/refman.nvim",
     dependencies = { "nvim-telescope/telescope.nvim" },
-    cmd = { "DOI", "ISBN", "RefCite", "RefBrowse", "RefSearch", "RefImport" },
+    cmd = { "DOI", "ISBN", "RefCite", "RefBrowse" },
     keys = {
-        { "<leader>rs", "<Plug>(RefmanImport)", desc = "Save line as citation" },
-        { "<leader>rb", "<Plug>(RefmanBrowse)", desc = "Browse bibliography" },
-        { "<leader>ri", "<Plug>(RefmanExport)", desc = "Insert citation" },
-        { "<leader>rc", "<Plug>(RefmanCite)",  desc = "Insert inline citation" },
+        { "<leader>rm", "<Plug>(RefmanBrowse)", desc = "Reference Manager" },
     },
 }
 ```
 
-### lazy.nvim (full custom config)
+All other actions use visual mode + command: `:'<,'>DOI`, `:'<,'>RefCite`, etc.
+
+### lazy.nvim (with opts)
 
 ```lua
 {
     "jbuck95/refman.nvim",
     dependencies = { "nvim-telescope/telescope.nvim" },
-    cmd = { "DOI", "ISBN", "RefCite", "RefBrowse", "RefSearch", "RefImport" },
+    cmd = { "DOI", "ISBN", "RefCite", "RefBrowse" },
     keys = {
-        { "<leader>rs", "<Plug>(RefmanImport)", desc = "Save line as citation" },
-        { "<leader>rb", "<Plug>(RefmanBrowse)", desc = "Browse bibliography" },
-        { "<leader>ri", "<Plug>(RefmanExport)", desc = "Insert citation" },
-        { "<leader>rc", "<Plug>(RefmanCite)",  desc = "Insert inline citation" },
+        { "<leader>rm", "<Plug>(RefmanBrowse)", desc = "Reference Manager" },
     },
     opts = {
-        log_level = "verbose",                    -- "verbose" | "info" | "warn" | "error"
-        db_file = "~/Documents/bibliography.sqlite3",  -- SQLite database path
+        log_level = "verbose",
+        db_file = "~/Documents/bibliography.sqlite3",
 
         source_apis = {
             crossref = { enabled = true },
@@ -98,8 +94,8 @@ Verify: `:checkhealth refman`
         csl = {
             enabled = true,
             default_style = "din-1505-2",
-            cite_mode = "full",                    -- "full" | "inline" | "both"
-            inline_format = "{author} ({year})",   -- fallback template
+            cite_mode = "full",
+            inline_format = "{author} ({year})",
             styles = {
                 { name = "DIN 1505-2 (German)",     key = "din-1505-2", lang = "de-DE" },
                 { name = "Chicago (notes)",          key = "chicago",    lang = "en-US" },
@@ -138,23 +134,17 @@ Verify: `:checkhealth refman`
 
 ## Usage
 
-Bind  ``RefBrowse`` and use the TUI. 
-
 | Command | Action |
 |---------|--------|
 | `:DOI` (visual selection) | Fetch DOI → pick CSL style → insert citation |
 | `:ISBN` (visual selection) | Fetch ISBN → pick CSL style → insert citation |
 | `:RefCite` (visual selection) | Fetch DOI/ISBN → insert inline citation `(Author, Year)` |
-| `:RefBrowse [query]` | Browse all entries (Telescope) |
-| `:RefSearch query` | Full-text search |
-| `:RefImport` | Save current line as bibliography entry |
-| `:RefOpen` | Open bibliography database |
-| `:RefExport` | Browse & insert single citation (Telescope) |
-| `:RefMulti` | Browse & insert multiple citations (Telescope) |
+| `:RefBrowse [query]` | Browse bibliography (Telescope) |
+| `:RefCiteLine` | Auto-detect DOI/ISBN from current line, open TUI |
 | `:RefLog` | Open debug log |
 | `:RefCacheClear` | Clear citation cache |
 
-### Telescope browser (RefBrowse / RefExport / RefMulti)
+### Telescope browser
 
 | Key | Action | Config |
 |-----|--------|--------|
@@ -166,14 +156,21 @@ Bind  ``RefBrowse`` and use the TUI.
 
 ### Keymaps via `<Plug>` mappings
 
+Only one mapping needed; everything else uses visual mode + commands.
+
 ```lua
-vim.keymap.set("n", "<leader>rs", "<Plug>(RefmanImport)", { desc = "Save line as citation" })
-vim.keymap.set("n", "<leader>rb", "<Plug>(RefmanBrowse)", { desc = "Browse bibliography" })
-vim.keymap.set("n", "<leader>ri", "<Plug>(RefmanExport)", { desc = "Insert citation" })
-vim.keymap.set("n", "<leader>rc", "<Plug>(RefmanCite)",  { desc = "Insert inline citation" })
-vim.keymap.set("n", "<leader>rm", "<Plug>(RefmanMulti)",  { desc = "Insert multiple citations" })
-vim.keymap.set("n", "<leader>rs", "<Plug>(RefmanSearch)", { desc = "Search bibliography" })
+vim.keymap.set("n", "<leader>rm", "<Plug>(RefmanBrowse)", { desc = "Reference Manager" })
 ```
+
+All available `<Plug>` mappings:
+
+| `<Plug>` | Command equivalent |
+|----------|-------------------|
+| `<Plug>(RefmanDOI)` | `:DOI` |
+| `<Plug>(RefmanISBN)` | `:ISBN` |
+| `<Plug>(RefmanCite)` | `:RefCite` |
+| `<Plug>(RefmanCiteLine)` | `:RefCiteLine` (auto-detect from line) |
+| `<Plug>(RefmanBrowse)` | `:RefBrowse` |
 
 ### Lua API
 
@@ -181,12 +178,9 @@ vim.keymap.set("n", "<leader>rs", "<Plug>(RefmanSearch)", { desc = "Search bibli
 local refman = require("refman")
 refman.convert_doi_citation()
 refman.convert_isbn_citation()
-refman.cite_inline_citation()                 -- inline (Author, Year)
-refman.import_current_line()
-refman.open_database()
-refman.export_citation()
-refman.export_citations_multi()
-refman.search_entries()
+refman.cite_inline_citation()                 -- inline (Author, Year) from selection/line
+refman.convert_citation()                     -- auto-detect DOI/ISBN from selection/line, open TUI
+refman.export_citation()                      -- Telescope browser
 refman.clear_cache()
 refman.open_log()
 refman.setup({ db_file = "~/my-bib.md" })
@@ -278,7 +272,8 @@ csl = {
 
 ```lua
 vim.cmd([[set rtp+=~/.local/share/nvim/lazy/refman.nvim]])
-vim.keymap.set("n", "<leader>ri", "<Plug>(RefmanExport)")
+vim.keymap.set("n", "<leader>rm", "<Plug>(RefmanBrowse)", { desc = "Reference Manager" })
+vim.keymap.set("n", "<leader>rc", "<Plug>(RefmanCiteLine)", { desc = "Cite from line" })
 ```
 
 ## Todo 

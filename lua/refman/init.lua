@@ -85,6 +85,34 @@ local function detect_id_type(sel)
   return "doi"
 end
 
+---Extract a cleaned DOI or ISBN from arbitrary text.
+---@param text string
+---@return string|nil clean_id, string|nil id_type
+local function extract_id(text)
+  if text == "" then
+    return nil, nil
+  end
+
+  -- DOI: 10.<digits>/<non-whitespace> anywhere in text
+  local doi = text:match("(10%.%d+%/%S+)")
+  if doi then
+    return doi:gsub("[.,;:)%]%[\"?!']+$", ""), "doi"
+  end
+
+  -- ISBN: remove spaces/hyphens, search digit blocks
+  local clean = text:gsub("[%s%-]", "")
+  local isbn13 = clean:match("(97[89]%d%d%d%d%d%d%d%d%d%d)")
+  if isbn13 then
+    return isbn13, "isbn"
+  end
+  local isbn10 = clean:match("(%d%d%d%d%d%d%d%d%d[%dX])")
+  if isbn10 then
+    return isbn10, "isbn"
+  end
+
+  return nil, nil
+end
+
 -- ── public API ───────────────────────────────────────────────────────────────
 
 function M.convert_doi_citation()
@@ -117,10 +145,14 @@ function M.convert_citation()
   init_submodules()
   local sel = _db.get_visual_selection()
   if sel == "" then
+    sel = vim.api.nvim_get_current_line()
+  end
+  local id, id_type = extract_id(sel)
+  if not id then
+    vim.notify("[refman] No DOI or ISBN found", vim.log.levels.WARN)
     return
   end
-  local id_type = detect_id_type(sel)
-  _tui.citation_tui(id_type, sel)
+  _tui.citation_tui(id_type, id)
 end
 
 ---Insert an inline citation for a DOI/ISBN via CSL.
@@ -129,6 +161,11 @@ function M.cite_inline_citation(style_key)
   init_submodules()
   local sel = _db.get_visual_selection()
   if sel == "" then
+    sel = vim.api.nvim_get_current_line()
+  end
+  local id, id_type = extract_id(sel)
+  if not id then
+    vim.notify("[refman] No DOI or ISBN found", vim.log.levels.WARN)
     return
   end
 
@@ -155,21 +192,20 @@ function M.cite_inline_citation(style_key)
     return
   end
 
-  local id_type = detect_id_type(sel)
   local fetcher = id_type == "doi" and _citation.fetch_doi_citation or _citation.fetch_isbn_citation
-  local _, entry = fetcher(sel, style_key)
+  local _, entry = fetcher(id, style_key)
 
   if not entry then
     local alt_type = id_type == "doi" and "isbn" or "doi"
     local alt_fetcher = alt_type == "doi" and _citation.fetch_doi_citation or _citation.fetch_isbn_citation
-    _, entry = alt_fetcher(sel, style_key)
+    _, entry = alt_fetcher(id, style_key)
     if entry then
       vim.notify("[refman] Detected as " .. id_type .. " but resolved via " .. alt_type, vim.log.levels.INFO)
     end
   end
 
   if not entry then
-    vim.notify("[refman] Could not fetch metadata for: " .. sel, vim.log.levels.WARN)
+    vim.notify("[refman] Could not fetch metadata for: " .. id, vim.log.levels.WARN)
     return
   end
 
@@ -216,17 +252,7 @@ function M.import_current_line()
   end
 end
 
-function M.open_database()
-  init_submodules()
-  _db.open_database()
-end
-
 function M.export_citation()
-  init_submodules()
-  require("refman.telescope.browser").open()
-end
-
-function M.export_citations_multi()
   init_submodules()
   require("refman.telescope.browser").open()
 end
@@ -240,15 +266,6 @@ function M.clear_cache()
   init_submodules()
   _citation.clear_cache()
   vim.notify("Citation cache cleared", vim.log.levels.INFO)
-end
-
-function M.search_entries()
-  init_submodules()
-  local query = vim.fn.input("Refman search: ")
-  if query == "" then
-    return
-  end
-  require("refman.telescope.browser").open({ query = query })
 end
 
 -- ── user commands ────────────────────────────────────────────────────────────
@@ -271,6 +288,10 @@ def_cmd("RefCite", function()
   M.cite_inline_citation()
 end, { range = true })
 
+def_cmd("RefCiteLine", function()
+  M.convert_citation()
+end)
+
 def_cmd("RefImport", function()
   M.import_current_line()
 end)
@@ -291,18 +312,6 @@ def_cmd("RefSearch", function(opts)
     end
   end
 end, { nargs = "?" })
-
-def_cmd("RefOpen", function()
-  M.open_database()
-end)
-
-def_cmd("RefExport", function()
-  M.export_citation()
-end)
-
-def_cmd("RefMulti", function()
-  M.export_citations_multi()
-end)
 
 def_cmd("RefLog", function()
   M.open_log()
@@ -326,28 +335,12 @@ vim.keymap.set("n", "<Plug>(RefmanCite)", function()
   M.cite_inline_citation()
 end, { silent = true })
 
-vim.keymap.set("n", "<Plug>(RefmanImport)", function()
-  M.import_current_line()
-end, { silent = true })
-
-vim.keymap.set("n", "<Plug>(RefmanOpen)", function()
-  M.open_database()
+vim.keymap.set("n", "<Plug>(RefmanCiteLine)", function()
+  M.convert_citation()
 end, { silent = true })
 
 vim.keymap.set("n", "<Plug>(RefmanBrowse)", function()
   M.export_citation()
-end, { silent = true })
-
-vim.keymap.set("n", "<Plug>(RefmanExport)", function()
-  M.export_citation()
-end, { silent = true })
-
-vim.keymap.set("n", "<Plug>(RefmanMulti)", function()
-  M.export_citations_multi()
-end, { silent = true })
-
-vim.keymap.set("n", "<Plug>(RefmanSearch)", function()
-  M.search_entries()
 end, { silent = true })
 
 return M
